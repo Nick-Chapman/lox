@@ -1,0 +1,25 @@
+
+executable-name:
+  echo lox.exe > $@
+
+include ../../jenga/rulelib/haskell.jenga
+
+main-entry:
+  echo Lox > $@
+
+ghc-version:
+  echo 9.10.3 > $@
+
+ghc-options:
+  echo -Werror >> $@
+  echo -Wall >> $@
+  echo -Wno-name-shadowing >> $@
+  echo -O2 >> $@
+
+default-extensions:
+  echo LambdaCase >> $@
+  echo DuplicateRecordFields >> $@
+  echo GADTs >> $@
+
+packages:
+  echo clock >> $@
