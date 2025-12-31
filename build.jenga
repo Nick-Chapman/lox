@@ -1,5 +1,5 @@
 
 *run : src/lox.exe
-  ./lox.exe ~/other/craftinginterpreters/test/bool/not.lox
+  ./lox.exe ~/other/craftinginterpreters/test/variable/shadow_global.lox
 
 !lox.exe: src/lox.exe

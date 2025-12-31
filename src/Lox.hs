@@ -1,12 +1,14 @@
 module Lox (main) where
 
 import Data.List (isSuffixOf)
-import Par4 (Par,parse,lit,sat,alts,some,many,noError,skip,context)
+import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context)
 import System.Environment(getArgs)
 import Text.Printf (printf)
 import qualified Data.Char as Char
 import System.Exit(ExitCode(..),exitWith)
 import System.IO (stderr,hFlush,hPutStrLn)
+import Data.Map (Map)
+import Data.Map qualified as Map
 
 main :: IO ()
 main = do
@@ -17,8 +19,9 @@ main = do
       contents <- readFile filename
       --sequence_ [ printf "%d: %s\n" i s | (i,s) <- zip [1::Int ..] (lines contents) ]
       case parse "Expect expression" gram contents of
-        Right prog ->
-          execute prog
+        Right prog -> do
+          let env0 = Map.empty
+          execute env0 prog
         Left err ->
           parseError err
       pure ()
@@ -48,21 +51,27 @@ data Prog
 
 data Decl
   = DStat Stat
+  | DVarDecl Identifier (Maybe Exp)
 
 data Stat
   = SExp Exp
   | SPrint Exp
+  | SBlock [Decl]
 
 data Exp
   = ELit Lit
   | EBinary Exp Op2 Exp
   | EUnary Op1 Exp
+  | EVar Identifier
 
 data Lit
   = LNil
   | LBool Bool
   | LNumber Double
   | LString String
+
+data Identifier = Id String
+  deriving (Eq,Ord)
 
 data Op1 = Negate | Not
 
@@ -71,37 +80,71 @@ data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Great
 ----------------------------------------------------------------------
 -- Execution
 
-execute :: Prog -> IO ()
-execute = \case
-  Prog decs -> mapM_ execD decs
+execute :: Env -> Prog -> IO ()
+execute env = \case
+  Prog decs ->
+    execDs env decs
 
-execD :: Decl -> IO ()
-execD = \case
-  DStat stat -> execS stat
+execDs :: Env -> [Decl] -> IO ()
+execDs env = \case
+  [] -> pure ()
+  d1:ds -> do
+    execD env d1 $ \env ->
+      execDs env ds
 
-execS :: Stat -> IO ()
-execS = \case
+execD :: Env -> Decl -> (Env -> IO ()) -> IO ()
+execD env = \case
+  DStat stat -> \k -> do
+    execS env stat
+    k env
+  DVarDecl id eopt -> \k -> do
+    v <-
+      case eopt of
+        Just e -> evaluate env e
+        Nothing -> pure VNil
+    k (Map.insert id v env)
+
+execS :: Env -> Stat -> IO ()
+execS env = \case
   SExp e -> do
-    _ <- eval e
+    _ <- evaluate env e
     pure ()
   SPrint e -> do
-    v <- eval e
+    v <- evaluate env e
     print v
+  SBlock decls -> do
+    execDs env decls
+
+
+----------------------------------------------------------------------
+-- Environment
+
+type Env = Map Identifier Value
+
 
 ----------------------------------------------------------------------
 -- Evaluation
 
-eval :: Exp -> IO Value
-eval = \case
-  ELit x -> pure (evalLit x)
-  EBinary e1 op e2 -> do
-    v1 <- eval e1
-    v2 <- eval e2
-    evalOp2 v1 v2 op
-  EUnary op e -> do
-    v <- eval e
-    evalOp1 op v
+evaluate :: Env -> Exp -> IO Value
+evaluate env = eval
+
   where
+    eval = \case
+      ELit x -> pure (evalLit x)
+      EBinary e1 op e2 -> do
+        v1 <- eval e1
+        v2 <- eval e2
+        evalOp2 v1 v2 op
+      EUnary op e -> do
+        v <- eval e
+        evalOp1 op v
+      EVar id -> do
+        case Map.lookup id env of
+          Just v -> pure v
+          Nothing -> do
+            let Id name = id
+            runtimeError (printf "Undefined variable '%s'." name)
+
     evalLit = \case
       LNil{} -> VNil
       LBool b -> VBool b
@@ -188,11 +231,26 @@ gram = program where
     whitespace
     Prog <$> some decl
 
-  decl :: Par Decl =
-    DStat <$> stat
+  decl = {-context "Expect decl" $ -} alts [varDecl, statDecl]
 
-  stat :: Par Stat =
-    alts [printStat, expressionStat]
+  statDecl = DStat <$> stat
+
+  varDecl = do
+    key "var"
+    x <- identifier
+    key "="
+    eopt <- opt expression
+    key ";"
+    pure (DVarDecl x eopt)
+
+  identifier :: Par Identifier
+  identifier = nibble $ Id <$> do  -- disallow keywords
+    x <- alpha
+    xs <- many (alts [alpha,digit])
+    pure (x:xs)
+
+  stat =
+    alts [printStat, expressionStat, blockStat]
 
   printStat = do
     key "print"
@@ -204,6 +262,12 @@ gram = program where
     e <- expression
     key ";"
     pure (SExp e)
+
+  blockStat = do
+    key "{"
+    xs <- many decl
+    key "}"
+    pure (SBlock xs)
 
   expression = equality
 
@@ -264,6 +328,7 @@ gram = program where
   primary :: Par Exp
   primary = alts
     [ ELit <$> literal
+    , EVar <$> identifier
     , bracketed expression
     ]
 
@@ -292,7 +357,6 @@ gram = program where
                pure (before ++ "." ++ after)
           , pure before
           ]
-      digit = sat Char.isDigit
 
   stringLit = context "Unterminated string" $ nibble $ do
     doubleQuote
@@ -323,3 +387,6 @@ gram = program where
   notNL = do
     _ <- sat (\case '\n' -> False; _ -> True)
     pure ()
+
+  alpha = sat Char.isAlpha
+  digit = sat Char.isDigit

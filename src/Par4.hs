@@ -72,7 +72,7 @@ data Expect = Expect String
 data K4 a b = K4
   { eps :: a -> Res b
   , succ :: Cursor -> [Char] -> a -> Res b
-  , fail :: () -> Res b
+  , fail :: Expect -> Res b
   , err :: Expect -> Cursor -> [Char] -> Res b
   }
 
@@ -103,20 +103,25 @@ parse something parStart chars0  = do
     Left (expect,x) -> Left (errorAt expect chars0 x)
     Right (a,x@Cursor{index=i}) -> do
       if i == length chars0 then Right a else
-        Left (errorAt (Expect "No trailing junk") chars0 x)
+        Left (errorAt (Expect "Expect EOF") chars0 x)
 
   where
 
     kFinal = K4 { eps = \a -> Right (a,mkCursor 0)
                 , succ = \i _ a -> Right (a,i)
-                , fail = \() -> Left (Expect "parse-final", mkCursor 0)
+                , fail = \expect -> Left (expect, mkCursor 0)
                 , err = \expect i _ -> Left (expect,i)
                 }
 
     run :: Expect -> Cursor -> [Char] -> Par a -> K4 a b -> Res b
-    run w i chars par k@K4{eps,succ,fail,err} = case par of
+    run x i chars par k@K4{eps,succ,fail,err} = case par of
 
-      Context expect par -> run expect i chars par k
+      Context xMod par ->
+        run xMod i chars par K4{ eps
+                               , succ
+                               , fail = \_ -> fail x
+                               , err -- = \_ -> err x
+                               }
 
       Pos -> do
         -- It would be more efficient to track line/col directly in the state of the parser
@@ -125,43 +130,43 @@ parse something parStart chars0  = do
         let position = mkPosition chars0 index
         eps position
 
-      Ret x -> eps x
+      Ret a -> eps a
 
-      Fail -> fail ()
+      Fail -> fail x
 
       Satisfy pred -> do
         case chars of
-          [] -> fail ()
+          [] -> fail x
           c:chars -> do
             let Cursor {index} = i
             let i' = i { index = 1 + index }
-            if pred c then succ i' chars c else fail ()
+            if pred c then succ i' chars c else fail x
 
       NoError par -> do
-        run w i chars par K4 { eps = eps
+        run x i chars par K4 { eps = eps
                              , succ = succ
                              , fail = fail
-                             , err = \_expect _ _ -> fail ()
+                             , err = \_expect _ _ -> fail x
                              }
 
       Alt p1 p2 -> do
-        run w i chars p1 K4{ eps = \a1 ->
-                               run w i chars p2 K4{ eps = \_ -> eps a1 -- left biased
+        run x i chars p1 K4{ eps = \a1 ->
+                               run x i chars p2 K4{ eps = \_ -> eps a1 -- left biased
                                                   , succ
                                                   , fail = \_ -> eps a1
                                                   , err
                                                   }
                            , succ
-                           , fail = \() -> run w i chars p2 k
+                           , fail = \_ -> run x i chars p2 k
                            , err
                            }
 
       Bind par f -> do
-        run w i chars par K4{ eps = \a -> run w i chars (f a) k
+        run x i chars par K4{ eps = \a -> run x i chars (f a) k
                             , succ = \i chars a ->
-                                       run w i chars (f a) K4{ eps = \a -> succ i chars a -- consume
+                                       run x i chars (f a) K4{ eps = \a -> succ i chars a -- consume
                                                              , succ
-                                                             , fail = \() -> err w i chars -- fail->error
+                                                             , fail = \x -> err x i chars -- fail->error
                                                              , err
                                                              }
                             , fail
