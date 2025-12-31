@@ -1,7 +1,7 @@
 module Lox (main) where
 
 import Data.List (isSuffixOf)
-import Par4 (Par,parse,lit,sat,alts,some,many,noError,skip)
+import Par4 (Par,parse,lit,sat,alts,some,many,noError,skip,context)
 import System.Environment(getArgs)
 import Text.Printf (printf)
 import qualified Data.Char as Char
@@ -16,7 +16,7 @@ main = do
     [filename] -> do
       contents <- readFile filename
       --sequence_ [ printf "%d: %s\n" i s | (i,s) <- zip [1::Int ..] (lines contents) ]
-      case parse gram contents of
+      case parse "Expect expression" gram contents of
         Right prog ->
           execute prog
         Left err ->
@@ -186,7 +186,7 @@ gram = program where
 
   program = do
     whitespace
-    Prog <$> many decl
+    Prog <$> some decl
 
   decl :: Par Decl =
     DStat <$> stat
@@ -294,7 +294,7 @@ gram = program where
           ]
       digit = sat Char.isDigit
 
-  stringLit = nibble $ do
+  stringLit = context "Unterminated string" $ nibble $ do
     doubleQuote
     x <- many stringLitChar
     doubleQuote
