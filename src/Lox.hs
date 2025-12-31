@@ -3,7 +3,6 @@ module Lox (main) where
 import Data.List (isSuffixOf)
 import Par4 (Par,parse,lit,sat,alts,some,many,noError,skip)
 import System.Environment(getArgs)
-import System.FilePath (takeFileName)
 import Text.Printf (printf)
 import qualified Data.Char as Char
 import System.Exit(ExitCode(..),exitWith)
@@ -17,12 +16,29 @@ main = do
     [filename] -> do
       contents <- readFile filename
       --sequence_ [ printf "%d: %s\n" i s | (i,s) <- zip [1::Int ..] (lines contents) ]
-      case parse (takeFileName filename) gram contents of
+      case parse gram contents of
         Right prog ->
           execute prog
         Left err ->
-          print err
+          parseError err
       pure ()
+
+parseError :: String -> IO ()
+parseError = abort 65
+
+runtimeError :: String -> IO a
+runtimeError mes = abort 70 (mes ++ "\n[line 1]") -- hack -- TODO: pass line number from caller
+
+abort :: Int -> String -> IO a
+abort code mes = do
+  putErr mes
+  exitWith (ExitFailure code)
+
+putErr :: String -> IO ()
+putErr s = do
+  hPutStrLn stderr s
+  hFlush stderr
+  pure ()
 
 ----------------------------------------------------------------------
 -- Ast
@@ -128,13 +144,13 @@ isTruthy = \case
 getNumber :: String -> Value -> IO Double
 getNumber message = \case
   VNumber n -> pure n
-  _ -> abort message
+  _ -> runtimeError message
 
 vadd :: (Value,Value) -> IO Value
 vadd = \case
   (VNumber n1, VNumber n2) -> pure (VNumber (n1 + n2))
   (VString s1, VString s2) -> pure (VString (s1 ++ s2))
-  _ -> abort "Operands must be two numbers or two strings."
+  _ -> runtimeError "Operands must be two numbers or two strings."
 
 vequal :: Value -> Value -> Bool
 vequal v1 v2 = case (v1,v2) of
@@ -143,18 +159,6 @@ vequal v1 v2 = case (v1,v2) of
   (VNumber n1, VNumber n2) -> n1 == n2
   (VString s1, VString s2) -> s1 == s2
   _ -> False
-
-abort :: String -> IO a
-abort mes = do
-  putErr mes
-  putErr "[line 1]" -- hack -- TODO: pass line number from caller
-  exitWith (ExitFailure 70)
-
-putErr :: String -> IO ()
-putErr s = do
-  hPutStrLn stderr s
-  hFlush stderr
-  pure ()
 
 ----------------------------------------------------------------------
 -- Values

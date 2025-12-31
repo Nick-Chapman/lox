@@ -75,20 +75,24 @@ data K4 a b = K4
   , err :: Int -> [Char] -> Res b       -- failure; input consumed (so an error!)
   }
 
-parse :: FilePath -> Par a -> String -> Either String a
-parse filename parStart chars0  = do
+parse :: Par a -> String -> Either String a
+parse parStart chars0  = do
 
   case (run 0 chars0 parStart kFinal) of
-    Left i -> Left $ printf "%s: failed to parse %s" filename (report i)
-    Right (a,i) -> do
-      if i == length chars0 then Right a else
-        Left $ printf "%s: unparsed input from %s" filename (report i)
+    Left i -> Left (errorAt i)
+    Right (a,i) -> do if i == length chars0 then Right a else Left (errorAt i)
 
   where
-    report :: Int -> String
-    report i = item ++ " at " ++ show (mkPosition i)
-      where
-        item = if i == length chars0 then "<EOF>" else show (chars0 !! i)
+    errorAt :: Int -> String
+    errorAt i = do
+      let message = "Expect expression"  -- TOOD: hack; caller should pass message
+      let andCol = False
+      let Position{line,col} = mkPosition i
+      printf "[line %d%s] Error at %s: %s."
+        line
+        (if andCol then "." ++ show col else "")
+        (show (chars0 !! i))
+        message
 
     mkPosition :: Int -> Position
     mkPosition p = Position {line,col}
