@@ -1,0 +1,5 @@
+
+*run : src/lox.exe
+  ./lox.exe ~/other/craftinginterpreters/test/expressions/evaluate.lox
+
+!lox.exe: src/lox.exe

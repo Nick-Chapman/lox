@@ -3,3 +3,4 @@
 .stack-work
 stack.yaml.lock
 *.cabal
+lox.exe
