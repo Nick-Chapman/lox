@@ -1,5 +1,5 @@
 
 *run : src/lox.exe
-  ./lox.exe ~/other/craftinginterpreters/test/expressions/evaluate.lox
+  ./lox.exe ~/other/craftinginterpreters/test/number/literals.lox
 
 !lox.exe: src/lox.exe
