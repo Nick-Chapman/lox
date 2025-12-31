@@ -1,5 +1,5 @@
 
 *run : src/lox.exe
-  ./lox.exe ~/other/craftinginterpreters/test/operator/equals.lox
+  ./lox.exe ~/other/craftinginterpreters/test/operator/not_equals.lox
 
 !lox.exe: src/lox.exe
