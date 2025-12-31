@@ -48,7 +48,7 @@ data Lit
   | LNumber Double
   | LString String
 
-data Op1 = Negate
+data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
 
@@ -94,6 +94,7 @@ eval = \case
 
     evalOp1 = \case
       Negate -> vnegate
+      Not -> \v -> pure (VBool (not (isTruthy v)))
 
     evalOp2 v1 v2 = \case
       Add -> vadd (v1,v2)
@@ -116,6 +117,13 @@ vnegate :: Value -> IO Value
 vnegate v1 = do
   n1 <- getNumber "Operand must be a number." v1
   pure (VNumber (negate n1))
+
+isTruthy :: Value -> Bool
+isTruthy = \case
+  VNil -> False
+  VBool b -> b
+  VString{} -> True
+  VNumber{} -> True
 
 getNumber :: String -> Value -> IO Double
 getNumber message = \case
@@ -239,7 +247,9 @@ gram = program where
          ]
 
   unary = alts
-    [ do op <- alts [ do key "-"; pure Negate ]
+    [ do op <- alts [ do key "-"; pure Negate
+                    , do key "!"; pure Not
+                    ]
          e <- unary
          pure (EUnary op e)
     , call
