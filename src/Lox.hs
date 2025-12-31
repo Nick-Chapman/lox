@@ -1,8 +1,9 @@
 module Lox (main) where
 
 import Data.List (isSuffixOf)
-import Par4 (Par,parse,lit,sat,alts,some,many,noError)
+import Par4 (Par,parse,lit,sat,alts,some,many,noError,skip)
 import System.Environment(getArgs)
+import System.FilePath (takeFileName)
 import Text.Printf (printf)
 import qualified Data.Char as Char
 
@@ -11,11 +12,14 @@ main = do
   getArgs >>= \case
     [] -> undefined --repl
     _:_:_ -> error "too any args"
-    [arg1] -> do
-      contents <- readFile arg1
+    [filename] -> do
+      contents <- readFile filename
       --sequence_ [ printf "%d: %s\n" i s | (i,s) <- zip [1::Int ..] (lines contents) ]
-      let e = parse gram contents
-      execute e
+      case parse (takeFileName filename) gram contents of
+        Right prog ->
+          execute prog
+        Left err ->
+          print err
       pure ()
 
 ----------------------------------------------------------------------
@@ -28,16 +32,23 @@ data Decl
   = DStat Stat
 
 data Stat
-  = SPrint Exp
+  = SExp Exp
+  | SPrint Exp
 
 data Exp
-  = ENumber Double
+  = ELit Lit
   | EBinary Exp Op2 Exp
   | EUnary Op1 Exp
 
+data Lit
+  = LNil
+  | LBool Bool
+  | LNumber Double
+  | LString String
+
 data Op1 = Negate
 
-data Op2 = Add | Sub
+data Op2 = Add | Sub | Equal
 
 ----------------------------------------------------------------------
 -- Execution
@@ -52,6 +63,7 @@ execD = \case
 
 execS :: Stat -> IO ()
 execS = \case
+  SExp e -> do _ <- pure $ eval e; pure ()
   SPrint e -> print (eval e)
 
 ----------------------------------------------------------------------
@@ -59,36 +71,59 @@ execS = \case
 
 eval :: Exp -> Value
 eval = \case
-  ENumber n -> VNumber n
+  ELit x -> evalLit x
   EBinary e1 op e2 -> evalOp2 op (eval e1) (eval e2)
   EUnary op e -> evalOp1 op (eval e)
   where
+    evalLit = \case
+      LNil{} -> VNil
+      LBool b -> VBool b
+      LNumber n -> VNumber n
+      LString s -> VString s
+
     evalOp1 = \case
       Negate -> vnegate
 
     evalOp2 = \case
       Add -> vadd
       Sub -> vsub
+      Equal -> \v1 v2 -> VBool (vequal v1 v2)
 
     vadd v1 v2 = VNumber (getNumber v1 + getNumber v2)
     vsub v1 v2 = VNumber (getNumber v1 - getNumber v2)
 
     vnegate v1 = VNumber (negate $ getNumber v1)
 
+vequal :: Value -> Value -> Bool
+vequal v1 v2 = case (v1,v2) of
+  (VNil,VNil) -> True
+  (VBool b1, VBool b2) -> b1 == b2
+  (VNumber n1, VNumber n2) -> n1 == n2
+  (VString s1, VString s2) -> s1 == s2
+  _ -> False
+
 ----------------------------------------------------------------------
 -- Values
 
-data Value = VNumber Double
+data Value
+  = VNil
+  | VBool Bool
+  | VNumber Double
+  | VString String
 
 getNumber :: Value -> Double
 getNumber = \case
   VNumber n -> n
+  v -> error (show ("getNumber",v))
 
 instance Show Value where
   show = \case
+    VNil -> "nil"
+    VBool b -> if b then "true" else "false"
     VNumber n -> do
       let s = printf "%f" n
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
+    VString s -> show s
 
 ----------------------------------------------------------------------
 -- Parse
@@ -104,7 +139,7 @@ gram = program where
     DStat <$> stat
 
   stat :: Par Stat =
-    alts [printStat]
+    alts [printStat, expressionStat]
 
   printStat = do
     key "print"
@@ -112,7 +147,23 @@ gram = program where
     key ";"
     pure (SPrint e)
 
-  expression = term
+  expressionStat = do
+    e <- expression
+    key ";"
+    pure (SExp e)
+
+  expression = equality
+
+  equality = do
+    e1 <- comparison
+    alts [ do op <- alts [ do key "=="; pure Equal
+                         ]
+              e2 <- comparison
+              pure (EBinary e1 op e2)
+         , pure e1
+         ]
+
+  comparison = term
 
   term = do
     e1 <- factor
@@ -133,11 +184,19 @@ gram = program where
     , primary
     ]
 
-
   primary :: Par Exp
   primary = alts
-    [ ENumber <$> number
+    [ ELit <$> literal
     , bracketed expression
+    ]
+
+  literal :: Par Lit
+  literal = alts
+    [ do key "nil"; pure LNil
+    , do key "true"; pure (LBool True)
+    , do key "false"; pure (LBool False)
+    , LNumber <$> numberLit
+    , LString <$> stringLit
     ]
 
   bracketed par = do
@@ -146,7 +205,17 @@ gram = program where
     key ")"
     pure x
 
-  number = nibble (read <$> numberChars)
+  numberLit = nibble (read <$> numberChars)
+
+  stringLit = nibble $ do
+    doubleQuote
+    x <- many stringLitChar
+    doubleQuote
+    pure x
+
+  doubleQuote = lit '"'
+
+  stringLitChar = sat $ \c -> c /= '"'
 
   key chars = nibble (noError (mapM_ lit chars))
 
@@ -156,15 +225,15 @@ gram = program where
     pure x
 
   numberChars = do
-    before <- digits
+    before <- some digit
     alts
       [ do lit '.'
-           after <- digits
+           after <- some digit
            pure (before ++ "." ++ after)
       , pure before
       ]
 
-  digits = some (sat Char.isDigit)
+  digit = sat Char.isDigit
 
   whitespace = skip (alts [white1, commentToEol])
 
@@ -178,5 +247,3 @@ gram = program where
   notNL = do
     _ <- sat (\case '\n' -> False; _ -> True)
     pure ()
-
-  skip p = do _ <- many p; return ()
