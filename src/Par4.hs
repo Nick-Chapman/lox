@@ -88,10 +88,10 @@ parse parStart chars0  = do
       let message = "Expect expression"  -- TOOD: hack; caller should pass message
       let andCol = False
       let Position{line,col} = mkPosition i
-      printf "[line %d%s] Error at %s: %s."
+      printf "[line %d%s] Error%s: %s."
         line
         (if andCol then "." ++ show col else "")
-        (show (chars0 !! i))
+        (if i < length chars0 then (" at " ++ show (chars0 !! i)) else "")
         message
 
     mkPosition :: Int -> Position

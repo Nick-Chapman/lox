@@ -1,0 +1,23 @@
+
+## TODO: unify build.jenga for all test subdirs
+
+#!,SELECTED: : echo '$glob' | grep '.lox$$' | sed 's|\(.*\).lox$$|\1|' > $out; chmod 644 $out
+
+select: ,SELECTED
+  cat $in | grep -v '^#'> $out; true
+
+#lox: ~/other/craftinginterpreters/clox
+lox: ../../lox.exe
+  cp $in $out
+
+rules: select
+  cat $in | while read x; do echo "$$x.stdout $$x.stderr : $$x.lox lox : ./lox $$x.lox > $$x.stdout 2> $$x.stderr; true"; done > $out
+
+include rules
+
+expect.names: select
+  touch $out
+  cat $in | while read f; do echo $$f.stdout >> $out; done
+  cat $in | while read f; do echo $$f.stderr >> $out; done
+
+include ~/code/jenga/rulelib/expect.jenga
