@@ -1,14 +1,15 @@
 module Lox (main) where
 
+import Data.IORef (IORef,newIORef,readIORef,writeIORef)
 import Data.List (isSuffixOf)
-import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context)
-import System.Environment(getArgs)
-import Text.Printf (printf)
-import qualified Data.Char as Char
-import System.Exit(ExitCode(..),exitWith)
-import System.IO (stderr,hFlush,hPutStrLn)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context)
+import System.Environment(getArgs)
+import System.Exit(ExitCode(..),exitWith)
+import System.IO (stderr,hFlush,hPutStrLn)
+import Text.Printf (printf)
+import qualified Data.Char as Char
 
 main :: IO ()
 main = do
@@ -20,7 +21,6 @@ main = do
       --sequence_ [ printf "%d: %s\n" i s | (i,s) <- zip [1::Int ..] (lines contents) ]
       case parse "Expect expression" gram contents of
         Right prog -> do
-          let env0 = Map.empty
           execute env0 prog
         Left err ->
           parseError err
@@ -63,6 +63,7 @@ data Exp
   | EBinary Exp Op2 Exp
   | EUnary Op1 Exp
   | EVar Identifier
+  | EAssign Identifier Exp
 
 data Lit
   = LNil
@@ -76,6 +77,37 @@ data Identifier = Id String
 data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
+
+----------------------------------------------------------------------
+-- Environment
+
+data Env = Env (Map Identifier (IORef Value))
+
+env0 :: Env
+env0 = Env Map.empty
+
+insertEnv :: Env -> Identifier -> Value -> IO Env
+insertEnv (Env m) x v = do
+  r <- newIORef v
+  pure $ Env (Map.insert x r m)
+
+lookupEnv :: Env -> Identifier -> IO (IORef Value)
+lookupEnv (Env m) x =
+  case Map.lookup x m of
+    Just r -> pure r
+    Nothing -> do
+      let Id name = x
+      runtimeError (printf "Undefined variable '%s'." name)
+
+readEnv :: Env -> Identifier -> IO Value
+readEnv env x = do
+  r <- lookupEnv env x
+  readIORef r
+
+assignEnv :: Env -> Identifier -> Value -> IO ()
+assignEnv env x v = do
+  r <- lookupEnv env x
+  writeIORef r v
 
 ----------------------------------------------------------------------
 -- Execution
@@ -102,7 +134,8 @@ execD env = \case
       case eopt of
         Just e -> evaluate env e
         Nothing -> pure VNil
-    k (Map.insert id v env)
+    env' <- insertEnv env id v
+    k env'
 
 execS :: Env -> Stat -> IO ()
 execS env = \case
@@ -114,13 +147,6 @@ execS env = \case
     print v
   SBlock decls -> do
     execDs env decls
-
-
-----------------------------------------------------------------------
--- Environment
-
-type Env = Map Identifier Value
-
 
 ----------------------------------------------------------------------
 -- Evaluation
@@ -138,12 +164,12 @@ evaluate env = eval
       EUnary op e -> do
         v <- eval e
         evalOp1 op v
-      EVar id -> do
-        case Map.lookup id env of
-          Just v -> pure v
-          Nothing -> do
-            let Id name = id
-            runtimeError (printf "Undefined variable '%s'." name)
+      EVar x -> do
+        readEnv env x
+      EAssign x e -> do
+        v <- eval e
+        assignEnv env x v
+        pure v
 
     evalLit = \case
       LNil{} -> VNil
@@ -269,7 +295,17 @@ gram = program where
     key "}"
     pure (SBlock xs)
 
-  expression = equality
+  expression = assign
+
+  assign = do
+    e1 <- equality
+    alts [ do key "="
+              e2 <- equality
+              case e1 of
+                EVar x1 -> pure (EAssign x1 e2)
+                _ -> context "unexpected assignment target" (alts[])
+         , pure e1
+         ]
 
   equality = do
     e1 <- comparison

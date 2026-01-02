@@ -1,5 +1,0 @@
-
-*run : src/lox.exe
-  ./lox.exe ~/other/craftinginterpreters/test/variable/shadow_global.lox
-
-!lox.exe: src/lox.exe

@@ -7,7 +7,7 @@ select: ,SELECTED
   cat $in | grep -v '^#'> $out; true
 
 #lox: ~/other/craftinginterpreters/clox
-lox: ../../lox.exe
+lox: ../../src/lox.exe
   cp $in $out
 
 rules: select
