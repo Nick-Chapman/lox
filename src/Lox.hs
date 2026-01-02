@@ -300,7 +300,7 @@ gram = program where
   assign = do
     e1 <- equality
     alts [ do key "="
-              e2 <- equality
+              e2 <- assign
               case e1 of
                 EVar x1 -> pure (EAssign x1 e2)
                 _ -> context "unexpected assignment target" (alts[])

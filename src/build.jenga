@@ -1,6 +1,6 @@
 # Testing...
 
-example : ~/other/craftinginterpreters/test/assignment/global.lox
+example : ~/other/craftinginterpreters/test/assignment/associativity.lox
   cp $in $out
 
 expect : example
