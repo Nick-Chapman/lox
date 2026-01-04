@@ -41,6 +41,9 @@ execStat env = \case
     print v
   SBlock decls -> do
     execDecls env decls
+  SIf cond s1 s2 -> do
+    v <- evaluate env cond
+    if isTruthy v then execStat env s1 else execStat env s2
 
 evaluate :: Env -> Exp -> IO Value
 evaluate env = eval where

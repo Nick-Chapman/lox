@@ -17,7 +17,11 @@ start :: Par Prog
 start = program where
 
   keywords =
-    [ "false"
+    [ "class"
+    , "else"
+    , "false"
+    , "fun"
+    , "if"
     , "nil"
     , "print"
     , "this"
@@ -35,23 +39,30 @@ start = program where
 
   varDecl = do
     key "var"
-    x <- identifier
+    x <- identifier "variable name"
     eopt <- opt $ do key "="; expression
     key ";"
     pure (DVarDecl x eopt)
 
-  identifier :: Par Identifier
-  identifier = nibble $ do
+  identifier :: String -> Par Identifier
+  identifier expect = nibble $ do
     pos <- position
     x <- alpha
     xs <- many (alts [alpha,digit])
     let name = x:xs
     if name `notElem` keywords then pure (Identifier { pos, name }) else do
-      let message = printf " at '%s': Expect variable name" name
+      let message = printf " at '%s': Expect %s" name expect
       reject pos message
 
   stat =
-    alts [printStat, expressionStat, blockStat]
+    alts [ifStat, printStat, expressionStat, blockStat]
+
+  ifStat = do
+    key "if"
+    cond <- bracketed expression
+    s1 <- stat
+    s2 <- alts [ do key "else"; stat, pure (SBlock []) ]
+    pure (SIf cond s1 s2)
 
   printStat = do
     key "print"
@@ -145,7 +156,7 @@ start = program where
   primary :: Par Exp
   primary = alts
     [ ELit <$> literal
-    , EVar <$> identifier
+    , EVar <$> identifier "expression"
     , EGrouping <$> bracketed expression
     ]
 

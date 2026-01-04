@@ -13,6 +13,7 @@ data Stat
   = SExp Exp
   | SPrint Exp
   | SBlock [Decl]
+  | SIf Exp Stat Stat
 
 data Exp
   = ELit Lit
