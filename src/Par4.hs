@@ -88,7 +88,7 @@ errorAt Expect {posOpt,message} chars0 x = do
         Nothing -> do
           if i0 < length chars0 then (" at " ++ show (chars0 !! i0) ++ ": ") else ""
         Just Pos{} -> ""
-  let andCol = False
+  let andCol = True
   let pos = mkPos chars0 i0 -- TODO: use posOpt when passed?
   let Pos{line,col} = pos
   printf "[line %d%s] Error%s%s."
