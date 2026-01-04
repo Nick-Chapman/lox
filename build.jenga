@@ -1,12 +1,5 @@
 
-example : ~/other/craftinginterpreters/test/assignment/associativity.lox
-  cp $in $out
+rules : chapter8.list rules.sh
+  cat $in | grep -v ^# | ./rules.sh > $out
 
-expect : example
-  ~/other/craftinginterpreters/jlox $in > $out 2>&1 || true
-
-actual : example src/lox.exe
-  ./lox.exe $in > $out 2>&1 || true
-
-*test: expect actual
-  git diff --color $ins
+include rules
