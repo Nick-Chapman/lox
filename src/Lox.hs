@@ -266,8 +266,7 @@ gram = program where
   varDecl = do
     key "var"
     x <- identifier
-    key "="
-    eopt <- opt expression
+    eopt <- opt $ do key "="; expression
     key ";"
     pure (DVarDecl x eopt)
 
