@@ -4,7 +4,7 @@ import Data.IORef (IORef,newIORef,readIORef,writeIORef)
 import Data.List (isSuffixOf)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context,position,reject,Pos(..))
+import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,position,reject,Pos(..))
 import System.Environment(getArgs)
 import System.Exit(ExitCode(..),exitWith)
 import System.IO (stderr,hFlush,hPutStrLn)
@@ -265,7 +265,7 @@ gram = program where
     whitespace
     Prog <$> many decl
 
-  decl = {-context "Expect decl" $ -} alts [varDecl, statDecl]
+  decl = alts [varDecl, statDecl]
 
   statDecl = DStat <$> stat
 
@@ -411,10 +411,13 @@ gram = program where
           , pure before
           ]
 
-  stringLit = context ": Unterminated string" $ nibble $ do
+  stringLit = nibble $ do
     doubleQuote
     x <- many stringLitChar
-    doubleQuote
+    pos <- position
+    alts [doubleQuote
+         , reject pos ": Unterminated string"
+         ]
     pure x
     where
       doubleQuote = lit '"'

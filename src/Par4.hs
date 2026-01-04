@@ -1,5 +1,5 @@
 -- | 4-value Parser Combinators
-module Par4 (Par,parse,word,key,int,ws0,ws1,sp,nl,lit,sat,char,alts,opt,skip,separated,terminated,many,some,digit,dot,noError,Pos(..),position,context,reject) where
+module Par4 (Par,parse,word,key,int,ws0,ws1,sp,nl,lit,sat,char,alts,opt,skip,separated,terminated,many,some,digit,dot,noError,Pos(..),position,reject) where
 
 import Control.Applicative (Alternative,empty,(<|>),many,some)
 import Control.Monad (ap,liftM)
@@ -30,7 +30,6 @@ sat :: (Char -> Bool) -> Par Char
 char :: Par Char
 noError :: Par a -> Par a
 position :: Par Pos
-context :: String -> Par a -> Par a
 reject :: Pos -> String -> Par a
 
 skip p = do _ <- many p; return ()
@@ -52,32 +51,13 @@ sat = Satisfy
 char = sat (const True)
 noError = NoError
 position = Position
-context message = Context (Expect Nothing message)
 reject = Reject
-
-data Par a where
-  Context :: Expect -> Par a -> Par a
-  Position :: Par Pos
-  Ret :: a -> Par a
-  Bind :: Par a -> (a -> Par b) -> Par b
-  Fail :: Par a
-  Satisfy :: (Char -> Bool) -> Par Char
-  NoError :: Par a -> Par a
-  Alt :: Par a -> Par a -> Par a
-  Reject :: Pos -> String -> Par a
 
 type Res a = Either (Expect,Cursor) (a,Cursor)
 
 data Cursor = Cursor { index :: Int }
 
 data Expect = Expect { posOpt :: Maybe Pos, message :: String }
-
-data K4 a b = K4
-  { eps :: a -> Res b
-  , succ :: Cursor -> [Char] -> a -> Res b
-  , fail :: Expect -> Res b
-  , err :: Expect -> Cursor -> [Char] -> Res b
-  }
 
 errorAt :: Expect -> String -> Cursor -> String
 errorAt Expect {posOpt,message} chars0 x = do
@@ -87,8 +67,8 @@ errorAt Expect {posOpt,message} chars0 x = do
       case posOpt of
         Nothing -> do
           let pos = mkPos chars0 i0
-          let message = if i0 < length chars0 then (" at " ++ show (chars0 !! i0) ++ ": ") else ""
-          (pos,message)
+          let message = if i0 < length chars0 then (" at " ++ show (chars0 !! i0)) else ""
+          (pos,message ++ ": ")
         Just pos -> (pos,"")
   let Pos{line,col} = pos
   printf "[line %d.%d] Error%s%s." line col atMsg message
@@ -102,35 +82,50 @@ mkPos chars0 i = Pos {line,col}
 mkCursor :: Int -> Cursor
 mkCursor index = Cursor {index}
 
+data Pos = Pos { line :: Int, col :: Int } deriving (Eq,Ord)
+
+instance Show Pos where
+  show Pos{line,col} = show line ++ "'" ++ show col
+
+data Par a where
+  Position :: Par Pos
+  Ret :: a -> Par a
+  Bind :: Par a -> (a -> Par b) -> Par b
+  Fail :: Par a
+  Satisfy :: (Char -> Bool) -> Par Char
+  NoError :: Par a -> Par a
+  Alt :: Par a -> Par a -> Par a
+  Reject :: Pos -> String -> Par a
+
+data K4 a b = K4
+  { eps :: a -> Res b
+  , succ :: Cursor -> [Char] -> a -> Res b
+  , fail :: Res b
+  , err :: Expect -> Cursor -> [Char] -> Res b
+  }
+
 parse :: String -> Par a -> String -> Either String a
 parse something parStart chars0  = do
 
-  case (run x0 (mkCursor 0) chars0 parStart kFinal) of
+  case (run (mkCursor 0) chars0 parStart kFinal) of
     Left (expect,x) -> Left (errorAt expect chars0 x)
     Right (a,x@Cursor{index=i}) -> do
       if i == length chars0 then Right a else
-        Left (errorAt x0 chars0 x)
+        Left (errorAt the_x0 chars0 x)
 
   where
 
-    x0 :: Expect
-    x0 = Expect Nothing something
+    the_x0 :: Expect -- TODO: cleanup
+    the_x0 = Expect Nothing something
 
     kFinal = K4 { eps = \a -> Right (a,mkCursor 0)
                 , succ = \i _ a -> Right (a,i)
-                , fail = \expect -> Left (expect, mkCursor 0)
+                , fail = Left (the_x0, mkCursor 0)
                 , err = \expect i _ -> Left (expect,i)
                 }
 
-    run :: Expect -> Cursor -> [Char] -> Par a -> K4 a b -> Res b
-    run x i chars par k@K4{eps,succ,fail,err} = case par of
-
-      Context xMod par ->
-        run xMod i chars par K4{ eps
-                               , succ
-                               , fail = \_ -> fail x
-                               , err -- = \_ -> err x
-                               }
+    run :: Cursor -> [Char] -> Par a -> K4 a b -> Res b
+    run i chars par k@K4{eps,succ,fail,err} = case par of
 
       Position -> do
         let Cursor{index} = i
@@ -139,51 +134,45 @@ parse something parStart chars0  = do
 
       Ret a -> eps a
 
-      Fail -> fail x
+      Fail -> fail
 
       Reject pos message -> err (Expect (Just pos) message) i chars
 
       Satisfy pred -> do
         case chars of
-          [] -> fail x
+          [] -> fail
           c:chars -> do
             let Cursor {index} = i
             let i' = i { index = 1 + index }
-            if pred c then succ i' chars c else fail x
+            if pred c then succ i' chars c else fail
 
       NoError par -> do
-        run x i chars par K4 { eps = eps
-                             , succ = succ
-                             , fail = fail
-                             , err = \_expect _ _ -> fail x
-                             }
-
-      Alt p1 p2 -> do
-        run x i chars p1 K4{ eps = \a1 ->
-                               run x i chars p2 K4{ eps = \_ -> eps a1 -- left biased
-                                                  , succ
-                                                  , fail = \_ -> eps a1
-                                                  , err
-                                                  }
-                           , succ
-                           , fail = \_ -> run x i chars p2 k
-                           , err
+        run i chars par K4 { eps = eps
+                           , succ = succ
+                           , fail = fail
+                           , err = \_expect _ _ -> fail
                            }
 
+      Alt p1 p2 -> do
+        run i chars p1 K4{ eps = \a1 ->
+                             run i chars p2 K4{ eps = \_ -> eps a1 -- left biased
+                                              , succ
+                                              , fail = eps a1
+                                              , err
+                                              }
+                         , succ
+                         , fail = run i chars p2 k
+                         , err
+                         }
+
       Bind par f -> do
-        run x i chars par K4{ eps = \a -> run x i chars (f a) k
-                            , succ = \i chars a ->
-                                       run x i chars (f a) K4{ eps = \a -> succ i chars a -- consume
-                                                             , succ
-                                                             , fail = \x -> err x i chars -- fail->error
-                                                             , err
-                                                             }
-                            , fail
-                            , err
-                            }
-
-
-data Pos = Pos { line :: Int, col :: Int } deriving (Eq,Ord)
-
-instance Show Pos where
-  show Pos{line,col} = show line ++ "'" ++ show col
+        run i chars par K4{ eps = \a -> run i chars (f a) k
+                          , succ = \i chars a ->
+                                     run i chars (f a) K4{ eps = \a -> succ i chars a -- consume
+                                                         , succ
+                                                         , fail = err the_x0 i chars -- fail->error
+                                                         , err
+                                                         }
+                          , fail
+                          , err
+                          }
