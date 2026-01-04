@@ -18,7 +18,6 @@ main = do
     _:_:_ -> error "too any args"
     [filename] -> do
       contents <- readFile filename
-      --sequence_ [ printf "%d: %s\n" i s | (i,s) <- zip [1::Int ..] (lines contents) ]
       case parse "Expect expression" gram contents of
         Right prog -> do
           execute env0 prog

@@ -15,7 +15,7 @@
 #~/other/craftinginterpreters/test/comments/unicode.lox
 ~/other/craftinginterpreters/test/empty_file.lox
 ~/other/craftinginterpreters/test/nil/literal.lox
-#~/other/craftinginterpreters/test/number/leading_dot.lox
+~/other/craftinginterpreters/test/number/leading_dot.lox
 ~/other/craftinginterpreters/test/number/literals.lox
 ~/other/craftinginterpreters/test/operator/add.lox
 ~/other/craftinginterpreters/test/operator/add_bool_nil.lox

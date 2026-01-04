@@ -109,13 +109,16 @@ mkCursor index = Cursor {index}
 parse :: String -> Par a -> String -> Either String a
 parse something parStart chars0  = do
 
-  case (run (Expect Nothing something) (mkCursor 0) chars0 parStart kFinal) of
+  case (run x0 (mkCursor 0) chars0 parStart kFinal) of
     Left (expect,x) -> Left (errorAt expect chars0 x)
     Right (a,x@Cursor{index=i}) -> do
       if i == length chars0 then Right a else
-        Left (errorAt (Expect Nothing "Expect EOF") chars0 x)
+        Left (errorAt x0 chars0 x)
 
   where
+
+    x0 :: Expect
+    x0 = Expect Nothing something
 
     kFinal = K4 { eps = \a -> Right (a,mkCursor 0)
                 , succ = \i _ a -> Right (a,i)
