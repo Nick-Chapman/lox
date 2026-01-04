@@ -71,7 +71,9 @@ errorAt Expect {posOpt,message} chars0 x = do
           (pos,message ++ ": ")
         Just pos -> (pos,"")
   let Pos{line,col} = pos
-  printf "[line %d.%d] Error%s%s." line col atMsg message
+  let andCol = False
+  let colS = if andCol then "." ++ show col else ""
+  printf "[line %d%s] Error%s%s." line colS atMsg message
 
 mkPos :: String -> Int -> Pos
 mkPos chars0 i = Pos {line,col}
