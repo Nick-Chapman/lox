@@ -4,7 +4,7 @@ import Data.IORef (IORef,newIORef,readIORef,writeIORef)
 import Data.List (isSuffixOf)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context,position,reject,Position(..))
+import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context,position,reject,Pos(..))
 import System.Environment(getArgs)
 import System.Exit(ExitCode(..),exitWith)
 import System.IO (stderr,hFlush,hPutStrLn)
@@ -28,8 +28,8 @@ main = do
 parseError :: String -> IO ()
 parseError = abort 65
 
-runtimeError :: Position -> String -> IO a
-runtimeError Position{line} mes = abort 70 (printf "%s\n[line %d]" mes line)
+runtimeError :: Pos -> String -> IO a
+runtimeError Pos{line} mes = abort 70 (printf "%s\n[line %d]" mes line)
 
 abort :: Int -> String -> IO a
 abort code mes = do
@@ -60,8 +60,8 @@ data Stat
 data Exp
   = ELit Lit
   | EGrouping Exp
-  | EBinary Position Exp Op2 Exp
-  | EUnary Position Op1 Exp
+  | EBinary Pos Exp Op2 Exp
+  | EUnary Pos Op1 Exp
   | EVar Identifier
   | EAssign Identifier Exp
 
@@ -75,7 +75,7 @@ data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
 
-data Identifier = IdentifierX { pos :: Position, name :: String }
+data Identifier = IdentifierX { pos :: Pos, name :: String }
 
 ----------------------------------------------------------------------
 -- Environment
@@ -197,7 +197,7 @@ evaluate env = eval
       n2 <- getNumber pos "Operands must be numbers." v2
       pure (f n1 n2)
 
-vnegate :: Position -> Value -> IO Value
+vnegate :: Pos -> Value -> IO Value
 vnegate pos v1 = do
   n1 <- getNumber pos "Operand must be a number." v1
   pure (VNumber (negate n1))
@@ -209,12 +209,12 @@ isTruthy = \case
   VString{} -> True
   VNumber{} -> True
 
-getNumber :: Position -> String -> Value -> IO Double
+getNumber :: Pos -> String -> Value -> IO Double
 getNumber pos message = \case
   VNumber n -> pure n
   _ -> runtimeError pos message
 
-vadd :: Position -> (Value,Value) -> IO Value
+vadd :: Pos -> (Value,Value) -> IO Value
 vadd pos = \case
   (VNumber n1, VNumber n2) -> pure (VNumber (n1 + n2))
   (VString s1, VString s2) -> pure (VString (s1 ++ s2))

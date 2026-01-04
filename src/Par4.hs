@@ -1,5 +1,5 @@
 -- | 4-value Parser Combinators
-module Par4 (Par,parse,word,key,int,ws0,ws1,sp,nl,lit,sat,char,alts,opt,skip,separated,terminated,many,some,digit,dot,noError,Position(..),position,context,reject) where
+module Par4 (Par,parse,word,key,int,ws0,ws1,sp,nl,lit,sat,char,alts,opt,skip,separated,terminated,many,some,digit,dot,noError,Pos(..),position,context,reject) where
 
 import Control.Applicative (Alternative,empty,(<|>),many,some)
 import Control.Monad (ap,liftM)
@@ -29,9 +29,9 @@ dot :: Par Char
 sat :: (Char -> Bool) -> Par Char
 char :: Par Char
 noError :: Par a -> Par a
-position :: Par Position
+position :: Par Pos
 context :: String -> Par a -> Par a
-reject :: Position -> String -> Par a
+reject :: Pos -> String -> Par a
 
 skip p = do _ <- many p; return ()
 separated sep p = do x <- p; alts [ pure [x], do sep; xs <- separated sep p; pure (x:xs) ]
@@ -51,26 +51,26 @@ dot = sat (/= '\n')
 sat = Satisfy
 char = sat (const True)
 noError = NoError
-position = Pos
+position = Position
 context message = Context (Expect Nothing message)
 reject = Reject
 
 data Par a where
   Context :: Expect -> Par a -> Par a
-  Pos :: Par Position
+  Position :: Par Pos
   Ret :: a -> Par a
   Bind :: Par a -> (a -> Par b) -> Par b
   Fail :: Par a
   Satisfy :: (Char -> Bool) -> Par Char
   NoError :: Par a -> Par a
   Alt :: Par a -> Par a -> Par a
-  Reject :: Position -> String -> Par a
+  Reject :: Pos -> String -> Par a
 
 type Res a = Either (Expect,Cursor) (a,Cursor)
 
 data Cursor = Cursor { index :: Int }
 
-data Expect = Expect { posOpt :: Maybe Position, message :: String }
+data Expect = Expect { posOpt :: Maybe Pos, message :: String }
 
 data K4 a b = K4
   { eps :: a -> Res b
@@ -87,18 +87,18 @@ errorAt Expect {posOpt,message} chars0 x = do
       case posOpt of
         Nothing -> do
           if i0 < length chars0 then (" at " ++ show (chars0 !! i0) ++ ": ") else ""
-        Just Position{} -> ""
+        Just Pos{} -> ""
   let andCol = False
-  let pos = mkPosition chars0 i0 -- TODO: use posOpt when passed?
-  let Position{line,col} = pos
+  let pos = mkPos chars0 i0 -- TODO: use posOpt when passed?
+  let Pos{line,col} = pos
   printf "[line %d%s] Error%s%s."
     line
     (if andCol then "." ++ show col else "")
     atMsg
     message
 
-mkPosition :: String -> Int -> Position
-mkPosition chars0 i = Position {line,col}
+mkPos :: String -> Int -> Pos
+mkPos chars0 i = Pos {line,col}
   where
     line :: Int = 1 + length [ () | c <- take i chars0, c == '\n' ]
     col :: Int = length (takeWhile (/= '\n') (reverse (take i chars0)))
@@ -136,12 +136,10 @@ parse something parStart chars0  = do
                                , err -- = \_ -> err x
                                }
 
-      Pos -> do
-        -- It would be more efficient to track line/col directly in the state of the parser
-        -- instead of mkPosition recounting newlines passed so far each time a position is required.
+      Position -> do
         let Cursor{index} = i
-        let position = mkPosition chars0 index
-        eps position
+        let pos = mkPos chars0 index
+        eps pos
 
       Ret a -> eps a
 
@@ -189,7 +187,7 @@ parse something parStart chars0  = do
                             }
 
 
-data Position = Position { line :: Int, col :: Int } deriving (Eq,Ord)
+data Pos = Pos { line :: Int, col :: Int } deriving (Eq,Ord)
 
-instance Show Position where
-  show Position{line,col} = show line ++ "'" ++ show col
+instance Show Pos where
+  show Pos{line,col} = show line ++ "'" ++ show col
