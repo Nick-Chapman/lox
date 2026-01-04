@@ -1,0 +1,215 @@
+module Parser (parser) where
+
+import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Control.Applicative (many,some)
+import Par4 (parse,Par,lit,sat,alts,opt,noError,skip,position,reject)
+import Runtime (abort)
+import Text.Printf (printf)
+import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
+
+parser :: String -> IO Prog
+parser s =
+  case Par4.parse "Expect expression" start s of
+    Right prog -> pure prog
+    Left err -> abort 65 err
+
+start :: Par Prog
+start = program where
+
+  keywords =
+    [ "false"
+    , "nil"
+    , "print"
+    , "this"
+    , "true"
+    , "var"
+    ]
+
+  program = do
+    whitespace
+    Prog <$> many decl
+
+  decl = alts [varDecl, statDecl]
+
+  statDecl = DStat <$> stat
+
+  varDecl = do
+    key "var"
+    x <- identifier
+    eopt <- opt $ do key "="; expression
+    key ";"
+    pure (DVarDecl x eopt)
+
+  identifier :: Par Identifier
+  identifier = nibble $ do
+    pos <- position
+    x <- alpha
+    xs <- many (alts [alpha,digit])
+    let name = x:xs
+    if name `notElem` keywords then pure (Identifier { pos, name }) else do
+      let message = printf " at '%s': Expect variable name" name
+      reject pos message
+
+  stat =
+    alts [printStat, expressionStat, blockStat]
+
+  printStat = do
+    key "print"
+    e <- expression
+    key ";"
+    pure (SPrint e)
+
+  expressionStat = do
+    e <- expression
+    key ";"
+    pure (SExp e)
+
+  blockStat = do
+    key "{"
+    xs <- many decl
+    key "}"
+    pure (SBlock xs)
+
+  expression = assign
+
+  assign = do
+    e1 <- equality
+    alts [ do pos <- position; key "="
+              case e1 of
+                EVar x1 -> do
+                  e2 <- assign
+                  pure (EAssign x1 e2)
+                _ -> reject pos " at '=': Invalid assignment target"
+         , pure e1
+         ]
+
+  equality = do
+    pos <- position
+    e1 <- comparison
+    alts [ do op <- alts [ do key "=="; pure Equals
+                         , do key "!="; pure NotEquals
+                         ]
+              e2 <- comparison
+              pure (EBinary pos e1 op e2)
+         , pure e1
+         ]
+
+  comparison = do
+    pos <- position
+    e1 <- term
+    alts [ do op <- alts [ alts []
+                         , do key "<="; pure LessEqual
+                         , do key "<"; pure Less
+                         , do key ">="; pure GreaterEqual
+                         , do key ">"; pure Greater
+                         ]
+              e2 <- term
+              pure (EBinary pos e1 op e2)
+         , pure e1
+         ]
+
+  term = do
+    pos <- position
+    e1 <- factor
+    alts [ do op <- alts [ do key "-"; pure Sub
+                         , do key "+"; pure Add
+                         ]
+              e2 <- factor
+              pure (EBinary pos e1 op e2)
+         , pure e1
+         ]
+
+  factor = do
+    pos <- position
+    e1 <- unary
+    alts [ do op <- alts [ do key "*"; pure Mul
+                         , do key "/"; pure Div
+                         ]
+              e2 <- unary
+              pure (EBinary pos e1 op e2)
+         , pure e1
+         ]
+
+  unary = do
+    pos <- position
+    alts [ do op <- alts [ do key "-"; pure Negate
+                         , do key "!"; pure Not
+                         ]
+              e <- unary
+              pure (EUnary pos op e)
+         , call
+         ]
+
+  call = primary
+
+  primary :: Par Exp
+  primary = alts
+    [ ELit <$> literal
+    , EVar <$> identifier
+    , EGrouping <$> bracketed expression
+    ]
+
+  literal :: Par Lit
+  literal = alts
+    [ do key "nil"; pure LNil
+    , do key "true"; pure (LBool True)
+    , do key "false"; pure (LBool False)
+    , LNumber <$> numberLit
+    , LString <$> stringLit
+    ]
+
+  bracketed par = do
+    key "("
+    x <- par
+    key ")"
+    pure x
+
+  numberLit = nibble (read <$> numberChars)
+    where
+      numberChars = do
+        before <- some digit
+        alts
+          [ do lit '.'
+               after <- some digit
+               pure (before ++ "." ++ after)
+          , pure before
+          ]
+
+  stringLit = nibble $ do
+    doubleQuote
+    x <- many stringLitChar
+    pos <- position
+    alts [doubleQuote
+         , reject pos ": Unterminated string"
+         ]
+    pure x
+    where
+      doubleQuote = lit '"'
+      stringLitChar = sat $ \c -> c /= '"'
+
+  key s =
+    if all isIdentifierChar s && s `notElem` keywords
+    then error (printf "Add \"%s\" to keywords list" s)
+    else nibble (noError (mapM_ lit s))
+    where isIdentifierChar c = Char.isNumber c || Char.isAlpha c || c `elem` "'_"
+
+  nibble par = do
+    x <- par
+    whitespace
+    pure x
+
+  whitespace = skip (alts [white1, commentToEol])
+
+  white1 = alts [lit ' ', lit '\n', lit '\t']
+
+  commentToEol :: Par ()
+  commentToEol = do
+    noError (do lit '/'; lit '/')
+    skip notNL
+
+  notNL = do
+    _ <- sat (\case '\n' -> False; _ -> True)
+    pure ()
+
+  alpha = sat Char.isAlpha
+  digit = sat Char.isDigit
