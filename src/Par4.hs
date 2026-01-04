@@ -83,19 +83,15 @@ errorAt :: Expect -> String -> Cursor -> String
 errorAt Expect {posOpt,message} chars0 x = do
   let Cursor{index=i0} = x
   let
-    atMsg =
+    (pos,atMsg) =
       case posOpt of
         Nothing -> do
-          if i0 < length chars0 then (" at " ++ show (chars0 !! i0) ++ ": ") else ""
-        Just Pos{} -> ""
-  let andCol = True
-  let pos = mkPos chars0 i0 -- TODO: use posOpt when passed?
+          let pos = mkPos chars0 i0
+          let message = if i0 < length chars0 then (" at " ++ show (chars0 !! i0) ++ ": ") else ""
+          (pos,message)
+        Just pos -> (pos,"")
   let Pos{line,col} = pos
-  printf "[line %d%s] Error%s%s."
-    line
-    (if andCol then "." ++ show col else "")
-    atMsg
-    message
+  printf "[line %d.%d] Error%s%s." line col atMsg message
 
 mkPos :: String -> Int -> Pos
 mkPos chars0 i = Pos {line,col}
