@@ -1,5 +1,5 @@
 -- | 4-value Parser Combinators
-module Par4 (Par,parse,word,key,int,ws0,ws1,sp,nl,lit,sat,char,alts,opt,skip,separated,terminated,many,some,digit,dot,noError,Position(..),position,context) where
+module Par4 (Par,parse,word,key,int,ws0,ws1,sp,nl,lit,sat,char,alts,opt,skip,separated,terminated,many,some,digit,dot,noError,Position(..),position,context,reject) where
 
 import Control.Applicative (Alternative,empty,(<|>),many,some)
 import Control.Monad (ap,liftM)
@@ -31,6 +31,7 @@ char :: Par Char
 noError :: Par a -> Par a
 position :: Par Position
 context :: String -> Par a -> Par a
+reject :: Position -> String -> Par a
 
 skip p = do _ <- many p; return ()
 separated sep p = do x <- p; alts [ pure [x], do sep; xs <- separated sep p; pure (x:xs) ]
@@ -51,7 +52,8 @@ sat = Satisfy
 char = sat (const True)
 noError = NoError
 position = Pos
-context s = Context (Expect s)
+context message = Context (Expect Nothing message)
+reject = Reject
 
 data Par a where
   Context :: Expect -> Par a -> Par a
@@ -62,12 +64,13 @@ data Par a where
   Satisfy :: (Char -> Bool) -> Par Char
   NoError :: Par a -> Par a
   Alt :: Par a -> Par a -> Par a
+  Reject :: Position -> String -> Par a
 
 type Res a = Either (Expect,Cursor) (a,Cursor)
 
 data Cursor = Cursor { index :: Int }
 
-data Expect = Expect String
+data Expect = Expect { posOpt :: Maybe Position, message :: String }
 
 data K4 a b = K4
   { eps :: a -> Res b
@@ -77,8 +80,9 @@ data K4 a b = K4
   }
 
 errorAt :: Expect -> String -> Cursor -> String
-errorAt (Expect message) chars0 x = do
-  let Cursor{index=i} = x
+errorAt Expect {posOpt,message} chars0 x = do
+  let Cursor{index=i0} = x
+  let i = case posOpt of Nothing -> i0; Just Position{i} -> i
   let andCol = False
   let Position{line,col} = mkPosition chars0 i
   printf "[line %d%s] Error%s: %s."
@@ -88,10 +92,10 @@ errorAt (Expect message) chars0 x = do
     message
 
 mkPosition :: String -> Int -> Position
-mkPosition chars0 p = Position {line,col}
+mkPosition chars0 i = Position {i,line,col}
   where
-    line :: Int = 1 + length [ () | c <- take p chars0, c == '\n' ]
-    col :: Int = length (takeWhile (/= '\n') (reverse (take p chars0)))
+    line :: Int = 1 + length [ () | c <- take i chars0, c == '\n' ]
+    col :: Int = length (takeWhile (/= '\n') (reverse (take i chars0)))
 
 mkCursor :: Int -> Cursor
 mkCursor index = Cursor {index}
@@ -99,11 +103,11 @@ mkCursor index = Cursor {index}
 parse :: String -> Par a -> String -> Either String a
 parse something parStart chars0  = do
 
-  case (run (Expect something) (mkCursor 0) chars0 parStart kFinal) of
+  case (run (Expect Nothing something) (mkCursor 0) chars0 parStart kFinal) of
     Left (expect,x) -> Left (errorAt expect chars0 x)
     Right (a,x@Cursor{index=i}) -> do
       if i == length chars0 then Right a else
-        Left (errorAt (Expect "Expect EOF") chars0 x)
+        Left (errorAt (Expect Nothing "Expect EOF") chars0 x)
 
   where
 
@@ -133,6 +137,8 @@ parse something parStart chars0  = do
       Ret a -> eps a
 
       Fail -> fail x
+
+      Reject pos message -> err (Expect (Just pos) message) i chars
 
       Satisfy pred -> do
         case chars of
@@ -174,7 +180,7 @@ parse something parStart chars0  = do
                             }
 
 
-data Position = Position { line :: Int, col :: Int } deriving (Eq,Ord)
+data Position = Position { i :: Int, line :: Int, col :: Int } deriving (Eq,Ord)
 
 instance Show Position where
   show Position{line,col} = show line ++ "'" ++ show col

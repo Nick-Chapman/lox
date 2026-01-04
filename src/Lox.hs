@@ -4,7 +4,7 @@ import Data.IORef (IORef,newIORef,readIORef,writeIORef)
 import Data.List (isSuffixOf)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context)
+import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context,position,reject)
 import System.Environment(getArgs)
 import System.Exit(ExitCode(..),exitWith)
 import System.IO (stderr,hFlush,hPutStrLn)
@@ -60,6 +60,7 @@ data Stat
 
 data Exp
   = ELit Lit
+  | EGrouping Exp
   | EBinary Exp Op2 Exp
   | EUnary Op1 Exp
   | EVar Identifier
@@ -157,6 +158,7 @@ evaluate env = eval
   where
     eval = \case
       ELit x -> pure (evalLit x)
+      EGrouping e -> eval e
       EBinary e1 op e2 -> do
         v1 <- eval e1
         v2 <- eval e2
@@ -299,11 +301,12 @@ gram = program where
 
   assign = do
     e1 <- equality
-    alts [ do key "="
-              e2 <- assign
+    alts [ do pos <- position; key "="
               case e1 of
-                EVar x1 -> pure (EAssign x1 e2)
-                _ -> context "unexpected assignment target" (alts[])
+                EVar x1 -> do
+                  e2 <- assign
+                  pure (EAssign x1 e2)
+                _ -> reject pos "Invalid assignment target"
          , pure e1
          ]
 
@@ -365,7 +368,7 @@ gram = program where
   primary = alts
     [ ELit <$> literal
     , EVar <$> identifier
-    , bracketed expression
+    , EGrouping <$> bracketed expression
     ]
 
   literal :: Par Lit

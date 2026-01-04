@@ -1,6 +1,6 @@
 ~/other/craftinginterpreters/test/assignment/associativity.lox
 ~/other/craftinginterpreters/test/assignment/global.lox
-#~/other/craftinginterpreters/test/assignment/grouping.lox
+~/other/craftinginterpreters/test/assignment/grouping.lox
 #~/other/craftinginterpreters/test/assignment/infix_operator.lox
 ~/other/craftinginterpreters/test/assignment/local.lox
 #~/other/craftinginterpreters/test/assignment/prefix_operator.lox
