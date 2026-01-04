@@ -82,13 +82,19 @@ data K4 a b = K4
 errorAt :: Expect -> String -> Cursor -> String
 errorAt Expect {posOpt,message} chars0 x = do
   let Cursor{index=i0} = x
-  let i = case posOpt of Nothing -> i0; Just Position{i} -> i
+  let
+    (atMsg,i) =
+      case posOpt of
+        Nothing -> do
+          let atMsg = (if i0 < length chars0 then (" at " ++ show (chars0 !! i0) ++ ": ") else "")
+          (atMsg,i0)
+        Just Position{i} -> ("",i)
   let andCol = False
   let Position{line,col} = mkPosition chars0 i
-  printf "[line %d%s] Error%s: %s."
+  printf "[line %d%s] Error%s%s."
     line
     (if andCol then "." ++ show col else "")
-    (if i < length chars0 then (" at " ++ show (chars0 !! i)) else "")
+    atMsg
     message
 
 mkPosition :: String -> Int -> Position

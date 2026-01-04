@@ -255,6 +255,15 @@ instance Show Value where
 gram :: Par Prog
 gram = program where
 
+  keywords =
+    [ "false"
+    , "nil"
+    , "print"
+    , "this"
+    , "true"
+    , "var"
+    ]
+
   program = do
     whitespace
     Prog <$> many decl
@@ -271,10 +280,13 @@ gram = program where
     pure (DVarDecl x eopt)
 
   identifier :: Par Identifier
-  identifier = nibble $ Id <$> do  -- disallow keywords
+  identifier = Id <$> do
+    pos <- position
     x <- alpha
     xs <- many (alts [alpha,digit])
-    pure (x:xs)
+    let s = x:xs
+    if s `elem` keywords then reject pos (printf " at '%s': Expect variable name" s) else
+      nibble (pure s)
 
   stat =
     alts [printStat, expressionStat, blockStat]
@@ -305,7 +317,7 @@ gram = program where
                 EVar x1 -> do
                   e2 <- assign
                   pure (EAssign x1 e2)
-                _ -> reject pos "Invalid assignment target"
+                _ -> reject pos " at '=': Invalid assignment target"
          , pure e1
          ]
 
@@ -396,7 +408,7 @@ gram = program where
           , pure before
           ]
 
-  stringLit = context "Unterminated string" $ nibble $ do
+  stringLit = context ": Unterminated string" $ nibble $ do
     doubleQuote
     x <- many stringLitChar
     doubleQuote
@@ -405,7 +417,11 @@ gram = program where
       doubleQuote = lit '"'
       stringLitChar = sat $ \c -> c /= '"'
 
-  key chars = nibble (noError (mapM_ lit chars))
+  key s =
+    if all isIdentifierChar s && s `notElem` keywords
+    then error (printf "Add \"%s\" to keywords list" s)
+    else nibble (noError (mapM_ lit s))
+    where isIdentifierChar c = Char.isNumber c || Char.isAlpha c || c `elem` "'_"
 
   nibble par = do
     x <- par

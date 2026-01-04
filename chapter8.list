@@ -61,9 +61,9 @@
 ~/other/craftinginterpreters/test/variable/undefined_global.lox
 #~/other/craftinginterpreters/test/variable/undefined_local.lox
 ~/other/craftinginterpreters/test/variable/uninitialized.lox
-#~/other/craftinginterpreters/test/variable/use_false_as_var.lox
+~/other/craftinginterpreters/test/variable/use_false_as_var.lox
 ~/other/craftinginterpreters/test/variable/use_global_in_initializer.lox
-#~/other/craftinginterpreters/test/variable/use_nil_as_var.lox
-#~/other/craftinginterpreters/test/variable/use_this_as_var.lox
+~/other/craftinginterpreters/test/variable/use_nil_as_var.lox
+~/other/craftinginterpreters/test/variable/use_this_as_var.lox
 #~/other/craftinginterpreters/test/string/error_after_multiline.lox
 ~/other/craftinginterpreters/test/string/multiline.lox
