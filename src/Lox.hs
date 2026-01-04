@@ -257,7 +257,7 @@ gram = program where
 
   program = do
     whitespace
-    Prog <$> some decl
+    Prog <$> many decl
 
   decl = {-context "Expect decl" $ -} alts [varDecl, statDecl]
 
@@ -421,7 +421,6 @@ gram = program where
   commentToEol = do
     noError (do lit '/'; lit '/')
     skip notNL
-    lit '\n'
 
   notNL = do
     _ <- sat (\case '\n' -> False; _ -> True)
