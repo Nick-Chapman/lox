@@ -4,7 +4,7 @@ import Data.IORef (IORef,newIORef,readIORef,writeIORef)
 import Data.List (isSuffixOf)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context,position,reject)
+import Par4 (Par,parse,lit,sat,alts,opt,some,many,noError,skip,context,position,reject,Position(..))
 import System.Environment(getArgs)
 import System.Exit(ExitCode(..),exitWith)
 import System.IO (stderr,hFlush,hPutStrLn)
@@ -29,8 +29,8 @@ main = do
 parseError :: String -> IO ()
 parseError = abort 65
 
-runtimeError :: String -> IO a
-runtimeError mes = abort 70 (mes ++ "\n[line 1]") -- hack -- TODO: pass line number from caller
+runtimeError :: Position -> String -> IO a
+runtimeError Position{line} mes = abort 70 (printf "%s\n[line %d]" mes line)
 
 abort :: Int -> String -> IO a
 abort code mes = do
@@ -61,8 +61,8 @@ data Stat
 data Exp
   = ELit Lit
   | EGrouping Exp
-  | EBinary Exp Op2 Exp
-  | EUnary Op1 Exp
+  | EBinary Position Exp Op2 Exp
+  | EUnary Position Op1 Exp
   | EVar Identifier
   | EAssign Identifier Exp
 
@@ -72,33 +72,31 @@ data Lit
   | LNumber Double
   | LString String
 
-data Identifier = Id String
-  deriving (Eq,Ord)
-
 data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
 
+data Identifier = IdentifierX { pos :: Position, name :: String }
+
 ----------------------------------------------------------------------
 -- Environment
 
-data Env = Env (Map Identifier (IORef Value))
+data Env = Env (Map String (IORef Value))
 
 env0 :: Env
 env0 = Env Map.empty
 
 insertEnv :: Env -> Identifier -> Value -> IO Env
-insertEnv (Env m) x v = do
+insertEnv (Env m) IdentifierX{name} v = do
   r <- newIORef v
-  pure $ Env (Map.insert x r m)
+  pure $ Env (Map.insert name r m)
 
 lookupEnv :: Env -> Identifier -> IO (IORef Value)
-lookupEnv (Env m) x =
-  case Map.lookup x m of
+lookupEnv (Env m) IdentifierX{name,pos} =
+  case Map.lookup name m of
     Just r -> pure r
     Nothing -> do
-      let Id name = x
-      runtimeError (printf "Undefined variable '%s'." name)
+      runtimeError pos (printf "Undefined variable '%s'." name)
 
 readEnv :: Env -> Identifier -> IO Value
 readEnv env x = do
@@ -159,13 +157,13 @@ evaluate env = eval
     eval = \case
       ELit x -> pure (evalLit x)
       EGrouping e -> eval e
-      EBinary e1 op e2 -> do
+      EBinary pos e1 op e2 -> do
         v1 <- eval e1
         v2 <- eval e2
-        evalOp2 v1 v2 op
-      EUnary op e -> do
+        evalOp2 pos v1 v2 op
+      EUnary pos op e -> do
         v <- eval e
-        evalOp1 op v
+        evalOp1 pos op v
       EVar x -> do
         readEnv env x
       EAssign x e -> do
@@ -179,30 +177,30 @@ evaluate env = eval
       LNumber n -> VNumber n
       LString s -> VString s
 
-    evalOp1 = \case
-      Negate -> vnegate
+    evalOp1 pos = \case
+      Negate -> vnegate pos
       Not -> \v -> pure (VBool (not (isTruthy v)))
 
-    evalOp2 v1 v2 = \case
-      Add -> vadd (v1,v2)
-      Sub -> VNumber <$> binary (-) v1 v2
-      Mul -> VNumber <$> binary (*) v1 v2
-      Div -> VNumber <$> binary (/) v1 v2
+    evalOp2 pos v1 v2 = \case
+      Add -> vadd pos (v1,v2)
+      Sub -> VNumber <$> binary pos (-) v1 v2
+      Mul -> VNumber <$> binary pos (*) v1 v2
+      Div -> VNumber <$> binary pos (/) v1 v2
       Equals -> pure (VBool (vequal v1 v2))
       NotEquals -> pure (VBool (not (vequal v1 v2)))
-      Less -> VBool <$> binary (<) v1 v2
-      LessEqual -> VBool <$> binary (<=) v1 v2
-      Greater -> VBool <$> binary (>) v1 v2
-      GreaterEqual -> VBool <$> binary (>=) v1 v2
+      Less -> VBool <$> binary pos (<) v1 v2
+      LessEqual -> VBool <$> binary pos (<=) v1 v2
+      Greater -> VBool <$> binary pos (>) v1 v2
+      GreaterEqual -> VBool <$> binary pos (>=) v1 v2
 
-    binary f v1 v2 = do
-      n1 <- getNumber "Operands must be numbers." v1
-      n2 <- getNumber "Operands must be numbers." v2
+    binary pos f v1 v2 = do
+      n1 <- getNumber pos "Operands must be numbers." v1
+      n2 <- getNumber pos "Operands must be numbers." v2
       pure (f n1 n2)
 
-vnegate :: Value -> IO Value
-vnegate v1 = do
-  n1 <- getNumber "Operand must be a number." v1
+vnegate :: Position -> Value -> IO Value
+vnegate pos v1 = do
+  n1 <- getNumber pos "Operand must be a number." v1
   pure (VNumber (negate n1))
 
 isTruthy :: Value -> Bool
@@ -212,16 +210,16 @@ isTruthy = \case
   VString{} -> True
   VNumber{} -> True
 
-getNumber :: String -> Value -> IO Double
-getNumber message = \case
+getNumber :: Position -> String -> Value -> IO Double
+getNumber pos message = \case
   VNumber n -> pure n
-  _ -> runtimeError message
+  _ -> runtimeError pos message
 
-vadd :: (Value,Value) -> IO Value
-vadd = \case
+vadd :: Position -> (Value,Value) -> IO Value
+vadd pos = \case
   (VNumber n1, VNumber n2) -> pure (VNumber (n1 + n2))
   (VString s1, VString s2) -> pure (VString (s1 ++ s2))
-  _ -> runtimeError "Operands must be two numbers or two strings."
+  _ -> runtimeError pos "Operands must be two numbers or two strings."
 
 vequal :: Value -> Value -> Bool
 vequal v1 v2 = case (v1,v2) of
@@ -280,13 +278,14 @@ gram = program where
     pure (DVarDecl x eopt)
 
   identifier :: Par Identifier
-  identifier = Id <$> do
+  identifier = nibble $ do
     pos <- position
     x <- alpha
     xs <- many (alts [alpha,digit])
-    let s = x:xs
-    if s `elem` keywords then reject pos (printf " at '%s': Expect variable name" s) else
-      nibble (pure s)
+    let name = x:xs
+    if name `notElem` keywords then pure (IdentifierX { pos, name }) else do
+      let message = printf " at '%s': Expect variable name" name
+      reject pos message
 
   stat =
     alts [printStat, expressionStat, blockStat]
@@ -322,16 +321,18 @@ gram = program where
          ]
 
   equality = do
+    pos <- position
     e1 <- comparison
     alts [ do op <- alts [ do key "=="; pure Equals
                          , do key "!="; pure NotEquals
                          ]
               e2 <- comparison
-              pure (EBinary e1 op e2)
+              pure (EBinary pos e1 op e2)
          , pure e1
          ]
 
   comparison = do
+    pos <- position
     e1 <- term
     alts [ do op <- alts [ alts []
                          , do key "<="; pure LessEqual
@@ -340,38 +341,41 @@ gram = program where
                          , do key ">"; pure Greater
                          ]
               e2 <- term
-              pure (EBinary e1 op e2)
+              pure (EBinary pos e1 op e2)
          , pure e1
          ]
 
   term = do
+    pos <- position
     e1 <- factor
     alts [ do op <- alts [ do key "-"; pure Sub
                          , do key "+"; pure Add
                          ]
               e2 <- factor
-              pure (EBinary e1 op e2)
+              pure (EBinary pos e1 op e2)
          , pure e1
          ]
 
   factor = do
+    pos <- position
     e1 <- unary
     alts [ do op <- alts [ do key "*"; pure Mul
                          , do key "/"; pure Div
                          ]
               e2 <- unary
-              pure (EBinary e1 op e2)
+              pure (EBinary pos e1 op e2)
          , pure e1
          ]
 
-  unary = alts
-    [ do op <- alts [ do key "-"; pure Negate
-                    , do key "!"; pure Not
-                    ]
-         e <- unary
-         pure (EUnary op e)
-    , call
-    ]
+  unary = do
+    pos <- position
+    alts [ do op <- alts [ do key "-"; pure Negate
+                         , do key "!"; pure Not
+                         ]
+              e <- unary
+              pure (EUnary pos op e)
+         , call
+         ]
 
   call = primary
 
