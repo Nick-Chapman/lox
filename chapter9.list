@@ -90,7 +90,7 @@
 ~/other/craftinginterpreters/test/variable/use_global_in_initializer.lox
 ~/other/craftinginterpreters/test/variable/use_nil_as_var.lox
 ~/other/craftinginterpreters/test/variable/use_this_as_var.lox
-#~/other/craftinginterpreters/test/while/class_in_body.lox
-#~/other/craftinginterpreters/test/while/fun_in_body.lox
-#~/other/craftinginterpreters/test/while/syntax.lox
-#~/other/craftinginterpreters/test/while/var_in_body.lox
+~/other/craftinginterpreters/test/while/class_in_body.lox
+~/other/craftinginterpreters/test/while/fun_in_body.lox
+~/other/craftinginterpreters/test/while/syntax.lox
+~/other/craftinginterpreters/test/while/var_in_body.lox

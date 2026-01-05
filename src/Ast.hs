@@ -14,6 +14,7 @@ data Stat
   | SPrint Exp
   | SBlock [Decl]
   | SIf Exp Stat Stat
+  | SWhile Exp Stat
 
 data Exp
   = ELit Lit

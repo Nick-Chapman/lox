@@ -17,6 +17,7 @@ start = program where
     , "class"
     , "else"
     , "false"
+    , "for"
     , "fun"
     , "if"
     , "nil"
@@ -25,6 +26,7 @@ start = program where
     , "this"
     , "true"
     , "var"
+    , "while"
     ]
 
   program = do
@@ -53,7 +55,19 @@ start = program where
       reject pos message
 
   stat =
-    alts [ifStat, printStat, expressionStat, blockStat]
+    alts [forStat, whileStat, ifStat, printStat, expressionStat, blockStat]
+
+  forStat = do
+    key "for"
+    key "(;;)"
+    body <- stat
+    pure (undefined body) -- temp hack for "for(;;)" in while/syntax.lox example
+
+  whileStat = do
+    key "while"
+    cond <- bracketed expression
+    body <- stat
+    pure (SWhile cond body)
 
   ifStat = do
     key "if"

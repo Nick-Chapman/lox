@@ -45,6 +45,11 @@ execStat env = \case
   SIf cond s1 s2 -> do
     v <- evaluate env cond
     if isTruthy v then execStat env s1 else execStat env s2
+  again@(SWhile cond body) -> do
+    v <- evaluate env cond
+    if not (isTruthy v) then pure () else do
+      execStat env body
+      execStat env again
 
 evaluate :: Env -> Exp -> Eff Value
 evaluate env = eval where
