@@ -1,17 +1,13 @@
-module Parser (parser) where
+module Parser (tryParse) where
 
 import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Par4 (parse,Par,lit,sat,alts,opt,noError,skip,position,reject)
-import Runtime (abort)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
 
-parser :: String -> IO Prog
-parser s =
-  case Par4.parse "Expect expression" start s of
-    Right prog -> pure prog
-    Left err -> abort 65 err
+tryParse :: String -> Either String Prog
+tryParse = Par4.parse "Expect expression" start
 
 start :: Par Prog
 start = program where

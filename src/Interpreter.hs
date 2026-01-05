@@ -1,24 +1,25 @@
 module Interpreter (execute) where
 
-import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..))
-import Environment (Env,env0,insertEnv,assignEnv,readEnv)
+import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Environment (Env,emptyEnv,insertEnv,assignEnv,readEnv)
 import Par4 (Pos(..))
-import Runtime (runtimeError,putOut)
+import Runtime (Eff(Print,Error))
+import Text.Printf (printf)
 import Value (Value(..),vequal,isTruthy)
 
-execute :: Prog -> IO ()
+execute :: Prog -> Eff ()
 execute = \case
   Prog decs ->
-    execDecls env0 decs
+    execDecls emptyEnv decs
 
-execDecls :: Env -> [Decl] -> IO ()
+execDecls :: Env -> [Decl] -> Eff ()
 execDecls env = \case
   [] -> pure ()
   d1:ds -> do
     execDecl env d1 $ \env ->
       execDecls env ds
 
-execDecl :: Env -> Decl -> (Env -> IO ()) -> IO ()
+execDecl :: Env -> Decl -> (Env -> Eff ()) -> Eff ()
 execDecl env = \case
   DStat stat -> \k -> do
     execStat env stat
@@ -31,21 +32,21 @@ execDecl env = \case
     env' <- insertEnv env id v
     k env'
 
-execStat :: Env -> Stat -> IO ()
+execStat :: Env -> Stat -> Eff ()
 execStat env = \case
   SExp e -> do
     _ <- evaluate env e
     pure ()
   SPrint e -> do
     v <- evaluate env e
-    putOut (show v)
+    Runtime.Print (show v)
   SBlock decls -> do
     execDecls env decls
   SIf cond s1 s2 -> do
     v <- evaluate env cond
     if isTruthy v then execStat env s1 else execStat env s2
 
-evaluate :: Env -> Exp -> IO Value
+evaluate :: Env -> Exp -> Eff Value
 evaluate env = eval where
 
   eval = \case
@@ -59,11 +60,18 @@ evaluate env = eval where
       v <- eval e
       evalOp1 pos op v
     EVar x -> do
-      readEnv env x
+      case readEnv env x of
+        Just eff -> eff
+        Nothing -> unboundVar x
     EAssign x e -> do
       v <- eval e
-      assignEnv env x v
+      case assignEnv env x v of
+        Just eff -> eff
+        Nothing -> unboundVar x
       pure v
+
+  unboundVar Identifier{pos,name} =
+    runtimeError pos (printf "Undefined variable '%s'." name)
 
   evalLit = \case
     LNil{} -> VNil
@@ -92,18 +100,22 @@ evaluate env = eval where
     n2 <- getNumber pos "Operands must be numbers." v2
     pure (f n1 n2)
 
-vnegate :: Pos -> Value -> IO Value
+vnegate :: Pos -> Value -> Eff Value
 vnegate pos v1 = do
   n1 <- getNumber pos "Operand must be a number." v1
   pure (VNumber (negate n1))
 
-getNumber :: Pos -> String -> Value -> IO Double
+getNumber :: Pos -> String -> Value -> Eff Double
 getNumber pos message = \case
   VNumber n -> pure n
   _ -> runtimeError pos message
 
-vadd :: Pos -> (Value,Value) -> IO Value
+vadd :: Pos -> (Value,Value) -> Eff Value
 vadd pos = \case
   (VNumber n1, VNumber n2) -> pure (VNumber (n1 + n2))
   (VString s1, VString s2) -> pure (VString (s1 ++ s2))
   _ -> runtimeError pos "Operands must be two numbers or two strings."
+
+
+runtimeError :: Pos -> String -> Eff a
+runtimeError Pos{line} mes = Error (printf "%s\n[line %d] in script" mes line)
