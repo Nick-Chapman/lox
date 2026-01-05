@@ -13,6 +13,7 @@
 ~/other/craftinginterpreters/test/comments/line_at_eof.lox
 ~/other/craftinginterpreters/test/comments/only_line_comment.lox
 ~/other/craftinginterpreters/test/comments/only_line_comment_and_line.lox
+~/other/craftinginterpreters/test/comments/unicode.lox
 ~/other/craftinginterpreters/test/empty_file.lox
 #~/other/craftinginterpreters/test/for/class_in_body.lox
 #~/other/craftinginterpreters/test/for/fun_in_body.lox
@@ -71,6 +72,7 @@
 ~/other/craftinginterpreters/test/print/missing_argument.lox
 ~/other/craftinginterpreters/test/string/error_after_multiline.lox
 ~/other/craftinginterpreters/test/string/multiline.lox
+#~/other/craftinginterpreters/test/string/literals.lox
 ~/other/craftinginterpreters/test/string/unterminated.lox
 ~/other/craftinginterpreters/test/variable/in_middle_of_block.lox
 ~/other/craftinginterpreters/test/variable/in_nested_block.lox

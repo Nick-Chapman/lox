@@ -3,6 +3,7 @@ module Lox (main) where
 import Interpreter qualified (execute)
 import Parser qualified (parser)
 import System.Environment (getArgs)
+import System.IO.Binary (readBinaryFile)
 
 main :: IO ()
 main = do
@@ -10,6 +11,6 @@ main = do
     [] -> error "repl"
     _:_:_ -> error "too any args"
     [filename] -> do
-      contents <- readFile filename
+      contents <- readBinaryFile filename
       prog <- Parser.parser contents
       Interpreter.execute prog

@@ -1,8 +1,8 @@
-module Runtime (runtimeError,abort) where
+module Runtime (runtimeError,abort,putOut) where
 
 import Par4 (Pos(..))
 import System.Exit(ExitCode(..),exitWith)
-import System.IO (stderr,hFlush,hPutStrLn)
+import System.IO (stdout,stderr,hFlush,hPutStrLn,hSetBinaryMode)
 import Text.Printf (printf)
 
 runtimeError :: Pos -> String -> IO a
@@ -17,4 +17,11 @@ putErr :: String -> IO ()
 putErr s = do
   hPutStrLn stderr s
   hFlush stderr
+  pure ()
+
+putOut :: String -> IO ()
+putOut s = do
+  hSetBinaryMode stdout True
+  hPutStrLn stdout s
+  hFlush stdout
   pure ()

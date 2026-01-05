@@ -3,7 +3,7 @@ module Interpreter (execute) where
 import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..))
 import Environment (Env,env0,insertEnv,assignEnv,readEnv)
 import Par4 (Pos(..))
-import Runtime (runtimeError)
+import Runtime (runtimeError,putOut)
 import Value (Value(..),vequal,isTruthy)
 
 execute :: Prog -> IO ()
@@ -38,7 +38,7 @@ execStat env = \case
     pure ()
   SPrint e -> do
     v <- evaluate env e
-    print v
+    putOut (show v)
   SBlock decls -> do
     execDecls env decls
   SIf cond s1 s2 -> do
