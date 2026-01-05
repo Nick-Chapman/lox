@@ -6,7 +6,7 @@ import System.IO (stdout,stderr,hFlush,hPutStrLn,hSetBinaryMode)
 import Text.Printf (printf)
 
 runtimeError :: Pos -> String -> IO a
-runtimeError Pos{line} mes = abort 70 (printf "%s\n[line %d]" mes line)
+runtimeError Pos{line} mes = abort 70 (printf "%s\n[line %d] in script" mes line)
 
 abort :: Int -> String -> IO a
 abort code mes = do

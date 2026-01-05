@@ -72,7 +72,7 @@
 ~/other/craftinginterpreters/test/print/missing_argument.lox
 ~/other/craftinginterpreters/test/string/error_after_multiline.lox
 ~/other/craftinginterpreters/test/string/multiline.lox
-#~/other/craftinginterpreters/test/string/literals.lox
+~/other/craftinginterpreters/test/string/literals.lox
 ~/other/craftinginterpreters/test/string/unterminated.lox
 ~/other/craftinginterpreters/test/variable/in_middle_of_block.lox
 ~/other/craftinginterpreters/test/variable/in_nested_block.lox

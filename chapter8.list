@@ -48,7 +48,7 @@
 ~/other/craftinginterpreters/test/operator/subtract_num_nonnum.lox
 ~/other/craftinginterpreters/test/precedence.lox
 ~/other/craftinginterpreters/test/print/missing_argument.lox
-#~/other/craftinginterpreters/test/string/literals.lox
+~/other/craftinginterpreters/test/string/literals.lox
 ~/other/craftinginterpreters/test/string/unterminated.lox
 ~/other/craftinginterpreters/test/variable/in_middle_of_block.lox
 ~/other/craftinginterpreters/test/variable/in_nested_block.lox
