@@ -94,56 +94,31 @@ start = program where
          , pure e1
          ]
 
-  equality = do
-    pos <- position
-    e1 <- comparison
-    alts [ do op <- alts [ do key "=="; pure Equals
-                         , do key "!="; pure NotEquals
-                         ]
-              e2 <- comparison
-              pure (EBinary pos e1 op e2)
-         , pure e1
-         ]
+  equality = leftAssoc comparison $ alts
+    [ do key "=="; pure Equals
+    , do key "!="; pure NotEquals
+    ]
 
-  comparison = do
-    pos <- position
-    e1 <- term
-    alts [ do op <- alts [ alts []
-                         , do key "<="; pure LessEqual
-                         , do key "<"; pure Less
-                         , do key ">="; pure GreaterEqual
-                         , do key ">"; pure Greater
-                         ]
-              e2 <- term
-              pure (EBinary pos e1 op e2)
-         , pure e1
-         ]
+  comparison = leftAssoc term $ alts
+    [ do key "<="; pure LessEqual
+    , do key "<"; pure Less
+    , do key ">="; pure GreaterEqual
+    , do key ">"; pure Greater
+    ]
 
-  term = do
-    pos <- position
-    e1 <- factor
-    alts [ do op <- alts [ do key "-"; pure Sub
-                         , do key "+"; pure Add
-                         ]
-              e2 <- factor
-              pure (EBinary pos e1 op e2)
-         , pure e1
-         ]
+  term = leftAssoc factor $ alts
+    [ do key "-"; pure Sub
+    , do key "+"; pure Add
+    ]
 
-  factor = do
-    pos <- position
-    e1 <- unary
-    alts [ do op <- alts [ do key "*"; pure Mul
-                         , do key "/"; pure Div
-                         ]
-              e2 <- unary
-              pure (EBinary pos e1 op e2)
-         , pure e1
-         ]
+  factor = leftAssoc unary $ alts
+    [ do key "*"; pure Mul
+    , do key "/"; pure Div
+    ]
 
-  unary = do
-    pos <- position
-    alts [ do op <- alts [ do key "-"; pure Negate
+  unary =
+    alts [ do pos <- position
+              op <- alts [ do key "-"; pure Negate
                          , do key "!"; pure Not
                          ]
               e <- unary
@@ -168,6 +143,16 @@ start = program where
     , LNumber <$> numberLit
     , LString <$> stringLit
     ]
+
+  leftAssoc subPar opPar = subPar >>= loop
+    where
+      loop e1 = do
+        alts [ do pos <- position
+                  op <- opPar
+                  e2 <- subPar
+                  loop (EBinary pos e1 op e2)
+             , pure e1
+             ]
 
   bracketed par = do
     key "("
