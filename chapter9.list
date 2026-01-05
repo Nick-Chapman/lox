@@ -32,10 +32,10 @@
 ~/other/craftinginterpreters/test/if/truth.lox
 ~/other/craftinginterpreters/test/if/var_in_else.lox
 ~/other/craftinginterpreters/test/if/var_in_then.lox
-#~/other/craftinginterpreters/test/logical_operator/and.lox
-#~/other/craftinginterpreters/test/logical_operator/and_truth.lox
-#~/other/craftinginterpreters/test/logical_operator/or.lox
-#~/other/craftinginterpreters/test/logical_operator/or_truth.lox
+~/other/craftinginterpreters/test/logical_operator/and.lox
+~/other/craftinginterpreters/test/logical_operator/and_truth.lox
+~/other/craftinginterpreters/test/logical_operator/or.lox
+~/other/craftinginterpreters/test/logical_operator/or_truth.lox
 ~/other/craftinginterpreters/test/nil/literal.lox
 ~/other/craftinginterpreters/test/number/leading_dot.lox
 ~/other/craftinginterpreters/test/number/literals.lox

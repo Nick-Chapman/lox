@@ -22,6 +22,8 @@ data Exp
   | EUnary Pos Op1 Exp
   | EVar Identifier
   | EAssign Identifier Exp
+  | ELogicalAnd Exp Exp
+  | ELogicalOr Exp Exp
 
 data Lit
   = LNil

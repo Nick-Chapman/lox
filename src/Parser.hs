@@ -13,12 +13,14 @@ start :: Par Prog
 start = program where
 
   keywords =
-    [ "class"
+    [ "and"
+    , "class"
     , "else"
     , "false"
     , "fun"
     , "if"
     , "nil"
+    , "or"
     , "print"
     , "this"
     , "true"
@@ -80,7 +82,7 @@ start = program where
   expression = assign
 
   assign = do
-    e1 <- equality
+    e1 <- logicalOr
     alts [ do pos <- position; key "="
               case e1 of
                 EVar x1 -> do
@@ -90,26 +92,40 @@ start = program where
          , pure e1
          ]
 
+  logicalOr = leftAssoc logicalAnd $ alts
+    [ do key "or"; pure ELogicalOr
+    ]
+
+  logicalAnd = leftAssoc equality $ alts
+    [ do key "and"; pure ELogicalAnd
+    ]
+
+  bin :: String -> Op2 -> Par (Exp -> Exp -> Exp)
+  bin name op = do
+    pos <- position
+    key name
+    pure (\e1 e2 -> EBinary pos e1 op e2)
+
   equality = leftAssoc comparison $ alts
-    [ do key "=="; pure Equals
-    , do key "!="; pure NotEquals
+    [ bin "==" Equals
+    , bin "!=" NotEquals
     ]
 
   comparison = leftAssoc term $ alts
-    [ do key "<="; pure LessEqual
-    , do key "<"; pure Less
-    , do key ">="; pure GreaterEqual
-    , do key ">"; pure Greater
+    [ bin "<=" LessEqual
+    , bin "<" Less
+    , bin ">=" GreaterEqual
+    , bin ">" Greater
     ]
 
   term = leftAssoc factor $ alts
-    [ do key "-"; pure Sub
-    , do key "+"; pure Add
+    [ bin "-" Sub
+    , bin "+" Add
     ]
 
   factor = leftAssoc unary $ alts
-    [ do key "*"; pure Mul
-    , do key "/"; pure Div
+    [ bin "*" Mul
+    , bin "/" Div
     ]
 
   unary =
@@ -140,13 +156,13 @@ start = program where
     , LString <$> stringLit
     ]
 
+  leftAssoc :: Par Exp -> Par (Exp -> Exp -> Exp) -> Par Exp
   leftAssoc subPar opPar = subPar >>= loop
     where
       loop e1 = do
-        alts [ do pos <- position
-                  op <- opPar
+        alts [ do f <- opPar
                   e2 <- subPar
-                  loop (EBinary pos e1 op e2)
+                  loop (f e1 e2)
              , pure e1
              ]
 

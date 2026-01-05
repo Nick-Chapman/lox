@@ -69,6 +69,12 @@ evaluate env = eval where
         Just eff -> eff
         Nothing -> unboundVar x
       pure v
+    ELogicalAnd e1 e2 -> do
+      v1 <- eval e1
+      if isTruthy v1 then eval e2 else pure v1
+    ELogicalOr e1 e2 -> do
+      v1 <- eval e1
+      if not (isTruthy v1) then eval e2 else pure v1
 
   unboundVar Identifier{pos,name} =
     runtimeError pos (printf "Undefined variable '%s'." name)
