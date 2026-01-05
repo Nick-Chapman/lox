@@ -1,5 +1,5 @@
 
 rules : chapter9.list rules.sh
-  cat $in | grep -v ^# | ./rules.sh > $out
+  cat $in | grep -v '^$$' | grep -v ^# | ./rules.sh > $out
 
 include rules
