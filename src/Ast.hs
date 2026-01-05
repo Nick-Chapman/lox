@@ -15,6 +15,7 @@ data Stat
   | SBlock [Decl]
   | SIf Exp Stat Stat
   | SWhile Exp Stat
+  | SFor (Decl,Exp,Stat) Stat
 
 data Exp
   = ELit Lit

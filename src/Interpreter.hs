@@ -50,6 +50,15 @@ execStat env = \case
     if not (isTruthy v) then pure () else do
       execStat env body
       execStat env again
+  SFor (init,cond,update) body -> do
+    let deSugared :: Stat = SBlock
+          [ init
+          , DStat $ SWhile cond $
+            SBlock [ DStat body
+                   , DStat update
+                   ]
+          ]
+    execStat env deSugared
 
 evaluate :: Env -> Exp -> Eff Value
 evaluate env = eval where

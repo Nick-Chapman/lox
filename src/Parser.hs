@@ -59,9 +59,24 @@ start = program where
 
   forStat = do
     key "for"
-    key "(;;)"
+    key "("
+    init <- alts
+      [ varDecl
+      , DStat <$> expressionStat
+      , do key ";"; pure (DStat (SBlock []))
+      ]
+    cond <- alts
+      [ expression
+      , pure (ELit (LBool True))
+      ]
+    key ";"
+    update <- alts
+      [ SExp <$> expression
+      , pure (SBlock [])
+      ]
+    key ")"
     body <- stat
-    pure (undefined body) -- temp hack for "for(;;)" in while/syntax.lox example
+    pure (SFor (init,cond,update) body)
 
   whileStat = do
     key "while"
