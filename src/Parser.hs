@@ -196,10 +196,15 @@ start = program where
              ]
 
   parameters :: Par [Identifier]
-  parameters =
-    bracketed $ alts [ separated (key ",") (identifier "param")
-                     , pure []
-                     ]
+  parameters = do
+    xs <- bracketed $ alts [ separated (key ",") (identifier "param")
+                           , pure []
+                           ]
+    let max = 255
+    case drop max xs of
+      [] -> pure xs
+      Identifier{pos,name}:_ -> do
+        reject pos (printf " at '%s': Can't have more than %d parameters" name max)
 
   arguments :: Par [Exp]
   arguments =

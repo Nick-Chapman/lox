@@ -29,7 +29,7 @@ test/function/parameters.lox
 #test/function/print.lox
 test/function/recursion.lox
 #test/function/too_many_arguments.lox
-#test/function/too_many_parameters.lox
+test/function/too_many_parameters.lox
 test/operator/not.lox
 test/regression/40.lox
 test/return/after_else.lox
