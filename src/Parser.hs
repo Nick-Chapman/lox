@@ -49,7 +49,7 @@ start = program where
     key "fun"
     name <- identifier "fun-name"
     xs <- parameters
-    body <- stat
+    body <- blockStat
     pure (DFunDecl name xs body)
 
   identifier :: String -> Par Identifier
