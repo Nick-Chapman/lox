@@ -15,7 +15,7 @@ $x.expect : $x.lox
 $x.actual : $x.lox src/lox.exe removeCol.sh
   (./lox.exe $x.lox 2>&1 | ./removeCol.sh) > $x.actual || true
 
-*test: $x.expect $x.actual
+*test-$x: $x.expect $x.actual
   git diff --color $x.expect $x.actual
 
 EOF
