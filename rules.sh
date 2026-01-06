@@ -13,10 +13,10 @@ $x.expect : $x.lox
    ~/other/craftinginterpreters/clox $x.lox > $x.expect 2>&1 || true
 
 $x.actual : $x.lox src/lox.exe removeCol.sh
-  (./lox.exe $x.lox 2>&1 | ./removeCol.sh) > $x.actual || true
+  ./lox.exe $x.lox > $x.actual 2>&1 || true
 
-*test-$x: $x.expect $x.actual
-  git diff --color $x.expect $x.actual
+*test-$x: $x.expect $x.actual removeCol.sh
+  cat $x.actual | ./removeCol.sh | git diff --color $x.expect -
 
 EOF
 

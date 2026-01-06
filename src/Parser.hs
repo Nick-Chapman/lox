@@ -2,7 +2,7 @@ module Parser (tryParse) where
 
 import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
-import Par4 (parse,Par,lit,sat,alts,opt,noError,skip,position,reject)
+import Par4 (parse,Par,lit,sat,alts,opt,noError,skip,position,reject,separated)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
 
@@ -23,6 +23,7 @@ start = program where
     , "nil"
     , "or"
     , "print"
+    , "return"
     , "this"
     , "true"
     , "var"
@@ -33,7 +34,7 @@ start = program where
     whitespace
     Prog <$> many decl
 
-  decl = alts [varDecl, statDecl]
+  decl = alts [funDecl, varDecl, statDecl]
 
   statDecl = DStat <$> stat
 
@@ -44,18 +45,35 @@ start = program where
     key ";"
     pure (DVarDecl x eopt)
 
+  funDecl = do
+    key "fun"
+    name <- identifier "fun-name"
+    xs <- parameters
+    body <- stat
+    pure (DFunDecl name xs body)
+
   identifier :: String -> Par Identifier
   identifier expect = nibble $ do
     pos <- position
     x <- alpha
-    xs <- many (alts [alpha,digit])
+    xs <- many (alts [alpha,digit,sat (=='_')])
     let name = x:xs
     if name `notElem` keywords then pure (Identifier { pos, name }) else do
       let message = printf " at '%s': Expect %s" name expect
       reject pos message
 
   stat =
-    alts [forStat, whileStat, ifStat, printStat, expressionStat, blockStat]
+    alts [returnStat, forStat, whileStat, ifStat, printStat, expressionStat, blockStat]
+
+  returnStat = do
+    pos <- position
+    key "return"
+    e <- alts
+      [ expression
+      , pure (ELit LNil)
+      ]
+    key ";"
+    pure (SReturn pos e)
 
   forStat = do
     key "for"
@@ -167,7 +185,27 @@ start = program where
          , call
          ]
 
-  call = primary
+  call :: Par Exp
+  call = primary >>= loop
+    where
+      loop e1 = do
+        alts [ do pos <- position
+                  xs <- arguments
+                  loop (ECall pos e1 xs)
+             , pure e1
+             ]
+
+  parameters :: Par [Identifier]
+  parameters =
+    bracketed $ alts [ separated (key ",") (identifier "param")
+                     , pure []
+                     ]
+
+  arguments :: Par [Exp]
+  arguments =
+    bracketed $ alts [ separated (key ",") expression
+                     , pure []
+                     ]
 
   primary :: Par Exp
   primary = alts

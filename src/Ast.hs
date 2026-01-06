@@ -5,9 +5,13 @@ import Par4 (Pos)
 data Prog
   = Prog [Decl]
 
+-- TODO merge Decl and Stat -- semantically they are the same class
+-- conversion always possible via DStat/SBlock
+
 data Decl
   = DStat Stat
   | DVarDecl Identifier (Maybe Exp)
+  | DFunDecl Identifier [Identifier] Stat
 
 data Stat
   = SExp Exp
@@ -16,6 +20,7 @@ data Stat
   | SIf Exp Stat Stat
   | SWhile Exp Stat
   | SFor (Decl,Exp,Stat) Stat
+  | SReturn Pos Exp
 
 data Exp
   = ELit Lit
@@ -26,6 +31,7 @@ data Exp
   | EAssign Identifier Exp
   | ELogicalAnd Exp Exp
   | ELogicalOr Exp Exp
+  | ECall Pos Exp [Exp]
 
 data Lit
   = LNil

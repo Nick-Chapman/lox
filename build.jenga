@@ -6,8 +6,9 @@
 
 chapters:
   touch $out
-  echo chap8.list >> $out #69
-  echo chap9.list >> $out #27
+  echo chap8.list  >> $out  #        69
+  echo chap9.list  >> $out  # +27 =  96
+  echo chap10.list >> $out  # +43 = 139
 
 fullpath.list: @chapters
   cat *.list | grep -v '^$$' | grep -v ^# | sed 's|^|~/other/craftinginterpreters/|' > $out
