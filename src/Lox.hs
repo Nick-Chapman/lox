@@ -1,6 +1,6 @@
 module Lox (main) where
 
-import Interpreter qualified (emptyEnv,execute)
+import Interpreter qualified (emptyEnv,executeTopDecls)
 import Parser qualified (tryParse)
 import Runtime (runEffect)
 import System.Environment (getArgs)
@@ -17,9 +17,9 @@ main = do
       contents <- readBinaryFile filename
       case (Parser.tryParse contents) of
         Left err -> abort 65 err
-        Right prog -> do
+        Right decls -> do
           let globals = Interpreter.emptyEnv
-          Runtime.runEffect putOut (Interpreter.execute globals prog) >>= \case
+          Runtime.runEffect putOut (Interpreter.executeTopDecls globals decls) >>= \case
             Right _globals' -> do
               -- if/when support repl, we have the updated globals in hand
               pure ()
