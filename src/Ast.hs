@@ -1,9 +1,6 @@
-module Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..)) where
+module Ast (Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..)) where
 
 import Par4 (Pos)
-
-data Prog
-  = Prog [Decl]
 
 -- TODO merge Decl and Stat -- semantically they are the same class
 -- conversion always possible via DStat/SBlock

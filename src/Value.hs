@@ -1,16 +1,19 @@
-module Value (Value(..),isTruthy,vequal) where
+module Value (Value(..),Env(..),isTruthy,vequal) where
 
 import Data.List (isSuffixOf)
 import Text.Printf (printf)
-import Runtime (Eff)
+import Runtime (Eff,Ref)
 import Par4 (Pos)
+import Data.Map (Map)
+
+data Env = Env (Map String (Ref Value))
 
 data Value
   = VNil
   | VBool Bool
   | VNumber Double
   | VString String
-  | VFunc String (Pos -> [Value] -> Eff Value)
+  | VFunc String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
 
 instance Show Value where
   show = \case

@@ -1,43 +1,43 @@
-module Interpreter (execute) where
+module Interpreter (execute,emptyEnv) where
 
-import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
-import Data.Map (Map)
+import Ast (Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Data.Map qualified as Map
 import Par4 (Pos(..))
 import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef),Ref)
 import Text.Printf (printf)
-import Value (Value(..),vequal,isTruthy)
+import Value (Value(..),Env(..),vequal,isTruthy)
 
-execute :: Prog -> Eff ()
-execute = \case
-  Prog decls -> do
-    let stat = SBlock decls
-    let env = emptyEnv
-    let ret _v = pure ()
-    let k = pure ()
-    execStat ret env stat k
+emptyEnv :: Env
+emptyEnv = Env Map.empty
 
-execDecl :: (Value -> Eff a) -> Env -> Decl -> (Env -> Eff a) -> Eff a
-execDecl ret env = \case
+execute :: Env -> [Decl] -> Eff Env
+execute globals = \case
+  [] -> pure globals
+  d1:ds -> do
+    let ret _v = error "return at top level"
+    execDecl globals ret globals d1 $ \globals ->
+      execute globals ds
+
+execDecl :: Env -> (Value -> Eff a) -> Env -> Decl -> (Env -> Eff a) -> Eff a
+execDecl globals ret env = \case
   DVarDecl id e -> \k -> do
-    r <- evaluate env e >>= NewRef
+    r <- evaluate globals env e >>= NewRef
     k (insertEnv env id r)
   DFunDecl fname formals body -> \k -> do
     r <- NewRef VNil
     env <- pure $ insertEnv env fname r
-    let v = close env fname formals body
-    WriteRef v r
+    WriteRef r (close env fname formals body)
     k (insertEnv env fname r)
   DStat stat -> \k -> do
-    execStat ret env stat (k env)
+    execStat globals ret env stat (k env)
 
 close :: Env -> Identifier -> [Identifier] -> Stat -> Value
-close env Identifier{name} formals body = VFunc name $ \pos args -> do
+close env Identifier{name} formals body = VFunc name $ \globals pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
   let ret = pure
   let k = ret VNil
-  execStat ret env body k
+  execStat globals ret env body k
 
 bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
 bindArgs env = \case
@@ -46,27 +46,32 @@ bindArgs env = \case
     r <- NewRef v
     bindArgs (insertEnv env x r) more
 
-execStat :: (Value -> Eff a) -> Env -> Stat -> Eff a -> Eff a
-execStat ret env = \case
+execStat :: Env -> (Value -> Eff a) -> Env -> Stat -> Eff a -> Eff a
+execStat globals ret env = \case
   SReturn _pos exp -> \_ignored_k -> do
-    v <- evaluate env exp
+    v <- evaluate globals env exp
     ret v
   SExp e -> \k -> do
-    _ <- evaluate env e
+    _ <- evaluate globals env e
     k
   SPrint e -> \k -> do
-    v <- evaluate env e
+    v <- evaluate globals env e
     Runtime.Print (show v)
     k
-  SBlock decls -> \k -> do
-    execDecls ret env decls k
+  SBlock decls -> loop env decls
+    where
+      loop env ds k = case ds of
+        [] -> k
+        d1:ds -> do
+          execDecl globals ret env d1 $ \env ->
+            loop env ds k
   SIf cond s1 s2 -> \k -> do
-    v <- evaluate env cond
-    if isTruthy v then execStat ret env s1 k else execStat ret env s2 k
+    v <- evaluate globals env cond
+    if isTruthy v then execStat globals ret env s1 k else execStat globals ret env s2 k
   again@(SWhile cond body) -> \k -> do
-    v <- evaluate env cond
+    v <- evaluate globals env cond
     if not (isTruthy v) then k else do
-      execStat ret env body (execStat ret env again k)
+      execStat globals ret env body (execStat globals ret env again k)
   SFor (init,cond,update) body -> \k -> do
     let deSugared :: Stat = SBlock
           [ init
@@ -75,17 +80,10 @@ execStat ret env = \case
                    , DStat update
                    ]
           ]
-    execStat ret env deSugared k
+    execStat globals ret env deSugared k
 
-execDecls :: (Value -> Eff a) -> Env -> [Decl] -> Eff a -> Eff a
-execDecls ret env ds k = case ds of
-  [] -> k
-  d1:ds -> do
-    execDecl ret env d1 $ \env ->
-      execDecls ret env ds k
-
-evaluate :: Env -> Exp -> Eff Value
-evaluate env = eval where
+evaluate :: Env -> Env -> Exp -> Eff Value
+evaluate globals env = eval where
 
   eval = \case
     ELit x -> pure (evalLit x)
@@ -101,9 +99,9 @@ evaluate env = eval where
       r <- lookup x
       ReadRef r
     EAssign x e -> do
-      v <- eval e
       r <- lookup x
-      WriteRef v r
+      v <- eval e
+      WriteRef r v
       pure v
     ELogicalAnd e1 e2 -> do
       v1 <- eval e1
@@ -114,20 +112,18 @@ evaluate env = eval where
     ECall pos func args -> do
       vfunc <- eval func
       vargs <- mapM eval args
-      asFunction pos vfunc vargs
+      asFunction vfunc globals pos vargs
 
   lookup :: Identifier -> Eff (Ref Value)
   lookup x =
     case lookupEnv env x of
       Just r -> pure r
       Nothing -> do
-        let Identifier{pos,name} = x
-        runtimeError pos (printf "Undefined variable '%s'." name)
-
-data Env = Env (Map String (Ref Value))
-
-emptyEnv :: Env
-emptyEnv = Env Map.empty
+        case lookupEnv globals x of
+          Just r -> pure r
+          Nothing -> do
+            let Identifier{pos,name} = x
+            runtimeError pos (printf "Undefined variable '%s'." name)
 
 insertEnv :: Env -> Identifier -> Ref Value -> Env
 insertEnv (Env m) Identifier{name} r = Env (Map.insert name r m)
@@ -165,15 +161,15 @@ evalOp2 pos v1 v2 = \case
     n2 <- asNumber pos "Operands must be numbers." v2
     pure (f n1 n2)
 
-asFunction :: Pos -> Value -> [Value] -> Eff Value
-asFunction pos func args = case func of
-  VFunc _ f -> f pos args
+asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
+asFunction func globals pos args = case func of
+  VFunc _ f -> f globals pos args
   _ -> runtimeError pos "Can only call functions and classes."
 
 checkArity :: Pos -> Int -> Int -> Eff ()
-checkArity pos formals args =
-  if formals == args then pure () else
-    runtimeError pos (printf "Expected %d arguments but got %d." formals args)
+checkArity pos nformals nargs =
+  if nformals == nargs then pure () else
+    runtimeError pos (printf "Expected %d arguments but got %d." nformals nargs)
 
 vnegate :: Pos -> Value -> Eff Value
 vnegate pos v1 = do

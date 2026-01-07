@@ -1,15 +1,15 @@
 module Parser (tryParse) where
 
-import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Ast (Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Par4 (parse,Par,lit,sat,alts,noError,skip,position,reject,separated)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
 
-tryParse :: String -> Either String Prog
+tryParse :: String -> Either String [Decl]
 tryParse = Par4.parse "Expect expression" start
 
-start :: Par Prog
+start :: Par [Decl]
 start = program where
 
   keywords =
@@ -32,7 +32,7 @@ start = program where
 
   program = do
     whitespace
-    Prog <$> many decl
+    many decl
 
   decl = alts [funDecl, varDecl, statDecl]
 

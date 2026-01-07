@@ -14,19 +14,19 @@ data Eff a where
   Error :: String -> Eff a
   NewRef :: a -> Eff (Ref a)
   ReadRef :: Ref a -> Eff a
-  WriteRef :: a -> Ref a -> Eff ()
+  WriteRef :: Ref a -> a -> Eff ()
 
 type Ref a = IORef a
 
-runEffect :: (String -> IO ()) -> Eff () -> IO (Maybe String)
-runEffect putOut eff = loop eff (\() -> pure Nothing)
+runEffect :: (String -> IO ()) -> Eff a -> IO (Either String a)
+runEffect putOut eff = loop eff (\a -> pure (Right a))
   where
-    loop :: Eff a -> (a -> IO (Maybe String)) -> IO (Maybe String)
+    loop :: Eff a -> (a -> IO (Either String b)) -> IO (Either String b)
     loop e = case e of
       Ret a -> \k -> k a
       Bind e f -> \k -> loop e $ \a -> loop (f a) k
       Print message -> \k -> do putOut message; k ()
-      Error err -> \_ignoredK -> pure (Just err)
+      Error err -> \_ignoredK -> pure (Left err)
       NewRef v -> \k -> do newIORef v >>= k
       ReadRef r -> \k -> do readIORef r >>= k
-      WriteRef v r -> \k -> do writeIORef r v >>= k
+      WriteRef r v -> \k -> do writeIORef r v >>= k

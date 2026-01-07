@@ -1,6 +1,6 @@
 module Lox (main) where
 
-import Interpreter qualified (execute)
+import Interpreter qualified (emptyEnv,execute)
 import Parser qualified (tryParse)
 import Runtime (runEffect)
 import System.Environment (getArgs)
@@ -11,16 +11,19 @@ import System.IO.Binary (readBinaryFile)
 main :: IO ()
 main = do
   getArgs >>= \case
-    [] -> error "repl"
+    [] -> error "no repl"
     _:_:_ -> error "too any args"
     [filename] -> do
       contents <- readBinaryFile filename
       case (Parser.tryParse contents) of
         Left err -> abort 65 err
         Right prog -> do
-          Runtime.runEffect putOut (Interpreter.execute prog) >>= \case
-            Nothing -> pure ()
-            Just err -> do
+          let globals = Interpreter.emptyEnv
+          Runtime.runEffect putOut (Interpreter.execute globals prog) >>= \case
+            Right _globals' -> do
+              -- if/when support repl, we have the updated globals in hand
+              pure ()
+            Left err -> do
               abort 70 err
 
 abort :: Int -> String -> IO a
