@@ -85,7 +85,7 @@ prefixPos pos (XMessage msg) = do
 
 defaultErrorMsg :: Text -> String
 defaultErrorMsg text =
-  printf "Unexpected %s." (ppNextChar text)
+  printf "Error: Unexpected %s." (ppNextChar text)
   where
     ppNextChar :: Text -> String
     ppNextChar t =

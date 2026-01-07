@@ -3,7 +3,7 @@ module Parser (tryParse) where
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Data.Text (Text)
-import Par4 (parse,Par,char,lit,sat,alts,noError,skip,position,reject,separated)
+import Par4 (parse,Par,char,lit,sat,alts,noError,skip,position,reject)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
 
@@ -120,11 +120,6 @@ start = program where
 
   expectExpression = reject_next "Expect expression."
 
-  reject_next msg = do
-    pos <- position
-    c <- char
-    reject pos (printf "Error at %s: %s" (show c) msg)
-
   expressionStat = do
     e <- expression
     key ";"
@@ -205,22 +200,26 @@ start = program where
              , pure e1
              ]
 
+  max :: Int = 255
+
   parameters :: Par [Identifier]
-  parameters = do
-    xs <- bracketed $ alts [ separated (key ",") (identifier "param")
-                           , pure []
-                           ]
-    let max = 255
-    case drop max xs of
-      [] -> pure xs
-      Identifier{pos,name}:_ -> do
-        reject pos (printf "Error at '%s': Can't have more than %d parameters." name max)
+  parameters = bracketed $ alts [pure [], someArgs max]
+    where
+      err = reject_next (printf "Can't have more than %d parameters." max)
+      someArgs n = if n == 0 then err else do
+        e <- identifier "param"
+        es <- alts [ pure [], do key ","; someArgs (n-1) ]
+        pure (e:es)
+
 
   arguments :: Par [Exp]
-  arguments =
-    bracketed $ alts [ separated (key ",") expression
-                     , pure []
-                     ]
+  arguments = bracketed $ alts [pure [], someArgs max]
+    where
+      err = reject_next (printf "Can't have more than %d arguments." max)
+      someArgs n = if n == 0 then err else do
+        e <- expression
+        es <- alts [ pure [], do key ","; someArgs (n-1) ]
+        pure (e:es)
 
   primary :: Par Exp
   primary = alts
@@ -281,6 +280,13 @@ start = program where
     where
       doubleQuote = lit '"'
       stringLitChar = sat $ \c -> c /= '"'
+
+
+  reject_next :: String -> Par a
+  reject_next msg = do
+    pos <- position
+    c <- char
+    reject pos (printf "Error at %s: %s" (show c) msg)
 
   key s =
     if all isIdentifierChar s && s `notElem` keywords

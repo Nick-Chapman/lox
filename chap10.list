@@ -28,7 +28,7 @@ test/function/mutual_recursion.lox
 test/function/parameters.lox
 #test/function/print.lox
 test/function/recursion.lox
-#test/function/too_many_arguments.lox
+test/function/too_many_arguments.lox
 test/function/too_many_parameters.lox
 test/operator/not.lox
 test/regression/40.lox
