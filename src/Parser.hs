@@ -2,12 +2,13 @@ module Parser (tryParse) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
-import Par4 (parse,Par,lit,sat,alts,noError,skip,position,reject,separated)
+import Data.Text (Text)
+import Par4 (parse,Par,char,lit,sat,alts,noError,skip,position,reject,separated)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
 
-tryParse :: String -> Either String [Stat]
-tryParse = Par4.parse "Expect expression" start
+tryParse :: Text -> Either String [Stat]
+tryParse = Par4.parse start
 
 start :: Par [Stat]
 start = program where
@@ -60,11 +61,11 @@ start = program where
     xs <- many (alts [alpha,digit,sat (=='_')])
     let name = x:xs
     if name `notElem` keywords then pure (Identifier { pos, name }) else do
-      let message = printf " at '%s': Expect %s" name expect
+      let message = printf "Error at '%s': Expect %s." name expect
       reject pos message
 
   stat =
-    alts [returnStat, forStat, whileStat, ifStat, printStat, expressionStat, blockStat]
+    alts [returnStat, forStat, whileStat, ifStat, printStat, blockStat, expressionStat]
 
   returnStat = do
     pos <- position
@@ -81,8 +82,8 @@ start = program where
     key "("
     init <- alts
       [ varDecl
-      , expressionStat
       , do key ";"; pure (SBlock [])
+      , expressionStat
       ]
     cond <- alts
       [ expression
@@ -90,10 +91,10 @@ start = program where
       ]
     key ";"
     update <- alts
-      [ SExp <$> expression
-      , pure (SBlock [])
+      [ do e <- expression; key ")"; pure (SExp e)
+      , do key ")"; pure (SBlock [])
+      , expectExpression
       ]
-    key ")"
     body <- stat
     pure (SFor (init,cond,update) body)
 
@@ -112,9 +113,17 @@ start = program where
 
   printStat = do
     key "print"
-    e <- expression
-    key ";"
-    pure (SPrint e)
+    alts
+      [ do e <- expression; key ";"; pure (SPrint e)
+      , expectExpression
+      ]
+
+  expectExpression = reject_next "Expect expression."
+
+  reject_next msg = do
+    pos <- position
+    c <- char
+    reject pos (printf "Error at %s: %s" (show c) msg)
 
   expressionStat = do
     e <- expression
@@ -136,7 +145,7 @@ start = program where
                 EVar x1 -> do
                   e2 <- assign
                   pure (EAssign x1 e2)
-                _ -> reject pos " at '=': Invalid assignment target"
+                _ -> reject pos "Error at '=': Invalid assignment target."
          , pure e1
          ]
 
@@ -205,7 +214,7 @@ start = program where
     case drop max xs of
       [] -> pure xs
       Identifier{pos,name}:_ -> do
-        reject pos (printf " at '%s': Can't have more than %d parameters" name max)
+        reject pos (printf "Error at '%s': Can't have more than %d parameters." name max)
 
   arguments :: Par [Exp]
   arguments =
@@ -245,7 +254,7 @@ start = program where
     key ")"
     pure x
 
-  numberLit = nibble (read <$> numberChars)
+  numberLit = alts [nibble (read <$> numberChars), badNumberLit]
     where
       numberChars = do
         before <- some digit
@@ -256,12 +265,17 @@ start = program where
           , pure before
           ]
 
+  badNumberLit = do
+    pos <- position
+    lit '.'
+    reject pos "Error at '.': Expect expression."
+
   stringLit = nibble $ do
     doubleQuote
     x <- many stringLitChar
     pos <- position
     alts [doubleQuote
-         , reject pos ": Unterminated string"
+         , reject pos "Error: Unterminated string."
          ]
     pure x
     where

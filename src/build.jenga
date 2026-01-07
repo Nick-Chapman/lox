@@ -24,6 +24,7 @@ default-extensions:
 packages:
   echo clock >> $@
   echo filepath >> $@
+  echo text >> $@
 
 # These dependencies are not discovered by gcc -M (not sure why)
 xdepends:

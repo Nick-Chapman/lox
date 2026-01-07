@@ -12,6 +12,7 @@ dependencies:
 - containers
 - filepath
 - MissingH
+- text
 
 default-extensions:
 - DuplicateRecordFields

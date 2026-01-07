@@ -1,5 +1,6 @@
 module Lox (main) where
 
+import Data.Text qualified as Text
 import Interpreter qualified (emptyEnv,executeTopDecls)
 import Parser qualified (tryParse)
 import Runtime (runEffect)
@@ -14,7 +15,7 @@ main = do
     [] -> error "no repl"
     _:_:_ -> error "too any args"
     [filename] -> do
-      contents <- readBinaryFile filename
+      contents <- Text.pack <$> readBinaryFile filename
       case (Parser.tryParse contents) of
         Left err -> abort 65 err
         Right decls -> do
