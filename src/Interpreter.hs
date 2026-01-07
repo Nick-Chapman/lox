@@ -24,11 +24,19 @@ execDecl ret env = \case
   DFunDecl fname formals body -> \k -> do
     r <- NewRef VNil
     env <- pure $ insertEnv env fname r
-    let v = VClosure {fname,formals,body,env}
+    let v = close env fname formals body
     WriteRef v r
     k (insertEnv env fname r)
   DStat stat -> \k -> do
     execStat ret env stat (k env)
+
+close :: Env Value -> Identifier -> [Identifier] -> Stat -> Value
+close env Identifier{name} formals body = VFunc name $ \pos args -> do
+  checkArity pos (length formals) (length args)
+  env <- bindArgs env (zip formals args)
+  let ret = pure
+  let k = ret VNil
+  execStat ret env body k
 
 execStat :: (Value -> Eff a) -> Env Value -> Stat -> Eff a -> Eff a
 execStat ret env = \case
@@ -98,7 +106,7 @@ evaluate env = eval where
     ECall pos func args -> do
       vfunc <- eval func
       vargs <- mapM eval args
-      vapply pos vfunc vargs
+      asFunction pos vfunc vargs
 
   lookup :: Identifier -> Eff (Ref Value)
   lookup x =
@@ -138,18 +146,10 @@ evalOp2 pos v1 v2 = \case
     n2 <- asNumber pos "Operands must be numbers." v2
     pure (f n1 n2)
 
-vapply :: Pos -> Value -> [Value] -> Eff Value
-vapply pos func args = case func of
-  VClosure{formals,body,env} -> do
-    checkArity pos (length formals) (length args)
-    env <- bindArgs env (zip formals args)
-    let ret = pure
-    let k = ret VNil
-    execStat ret env body k
-  _ ->
-    runtimeError pos "Can only call functions and classes."
-
-  where
+asFunction :: Pos -> Value -> [Value] -> Eff Value
+asFunction pos func args = case func of
+  VFunc _ f -> f pos args
+  _ -> runtimeError pos "Can only call functions and classes."
 
 checkArity :: Pos -> Int -> Int -> Eff ()
 checkArity pos formals args =

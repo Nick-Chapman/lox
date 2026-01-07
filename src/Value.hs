@@ -2,20 +2,15 @@ module Value (Value(..),isTruthy,vequal) where
 
 import Data.List (isSuffixOf)
 import Text.Printf (printf)
-import Ast (Identifier(..),Stat)
-import Environment (Env)
+import Runtime (Eff)
+import Par4 (Pos)
 
 data Value
   = VNil
   | VBool Bool
   | VNumber Double
   | VString String
-  | VClosure
-    { fname :: Identifier
-    , formals :: [Identifier]
-    , body :: Stat
-    , env :: Env Value
-    }
+  | VFunc String (Pos -> [Value] -> Eff Value)
 
 instance Show Value where
   show = \case
@@ -25,7 +20,7 @@ instance Show Value where
       let s = printf "%f" n
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
-    VClosure{fname=Identifier{name}} -> printf "<fn %s>" name
+    VFunc name _  -> printf "<fn %s>" name
 
 isTruthy :: Value -> Bool
 isTruthy = \case
@@ -33,7 +28,7 @@ isTruthy = \case
   VBool b -> b
   VString{} -> True
   VNumber{} -> True
-  VClosure{} -> True
+  VFunc{} -> True
 
 vequal :: Value -> Value -> Bool
 vequal v1 v2 = case (v1,v2) of
