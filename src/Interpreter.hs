@@ -17,7 +17,7 @@ execute = \case
     let k = pure ()
     execStat ret env stat k
 
-execDecl :: (Value -> Eff a) -> Env Value -> Decl -> (Env Value -> Eff a) -> Eff a
+execDecl :: (Value -> Eff a) -> Env -> Decl -> (Env -> Eff a) -> Eff a
 execDecl ret env = \case
   DVarDecl id e -> \k -> do
     r <- evaluate env e >>= NewRef
@@ -31,7 +31,7 @@ execDecl ret env = \case
   DStat stat -> \k -> do
     execStat ret env stat (k env)
 
-close :: Env Value -> Identifier -> [Identifier] -> Stat -> Value
+close :: Env -> Identifier -> [Identifier] -> Stat -> Value
 close env Identifier{name} formals body = VFunc name $ \pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
@@ -39,14 +39,14 @@ close env Identifier{name} formals body = VFunc name $ \pos args -> do
   let k = ret VNil
   execStat ret env body k
 
-bindArgs :: Env Value -> [(Identifier,Value)] -> Eff (Env Value)
+bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
 bindArgs env = \case
   [] -> pure env
   (x,v):more -> do
     r <- NewRef v
     bindArgs (insertEnv env x r) more
 
-execStat :: (Value -> Eff a) -> Env Value -> Stat -> Eff a -> Eff a
+execStat :: (Value -> Eff a) -> Env -> Stat -> Eff a -> Eff a
 execStat ret env = \case
   SReturn _pos exp -> \_ignored_k -> do
     v <- evaluate env exp
@@ -77,14 +77,14 @@ execStat ret env = \case
           ]
     execStat ret env deSugared k
 
-execDecls :: (Value -> Eff a) -> Env Value -> [Decl] -> Eff a -> Eff a
+execDecls :: (Value -> Eff a) -> Env -> [Decl] -> Eff a -> Eff a
 execDecls ret env ds k = case ds of
   [] -> k
   d1:ds -> do
     execDecl ret env d1 $ \env ->
       execDecls ret env ds k
 
-evaluate :: Env Value -> Exp -> Eff Value
+evaluate :: Env -> Exp -> Eff Value
 evaluate env = eval where
 
   eval = \case
@@ -124,16 +124,15 @@ evaluate env = eval where
         let Identifier{pos,name} = x
         runtimeError pos (printf "Undefined variable '%s'." name)
 
-data Env v = Env (Map String (Ref v))
+data Env = Env (Map String (Ref Value))
 
-emptyEnv :: Env v
+emptyEnv :: Env
 emptyEnv = Env Map.empty
 
-insertEnv :: Env v -> Identifier -> Ref v -> Env v
-insertEnv (Env m) Identifier{name} r = do
-  Env (Map.insert name r m)
+insertEnv :: Env -> Identifier -> Ref Value -> Env
+insertEnv (Env m) Identifier{name} r = Env (Map.insert name r m)
 
-lookupEnv :: Env v -> Identifier -> Maybe (Ref v)
+lookupEnv :: Env -> Identifier -> Maybe (Ref Value)
 lookupEnv (Env m) Identifier{name} = Map.lookup name m
 
 evalLit :: Lit -> Value
