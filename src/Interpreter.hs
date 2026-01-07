@@ -3,7 +3,7 @@ module Interpreter (execute) where
 import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Environment (Env,emptyEnv,insertEnv,lookupEnv)
 import Par4 (Pos(..))
-import Runtime (Eff(Print,Error,ReadRef,WriteRef),Ref)
+import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef),Ref)
 import Text.Printf (printf)
 import Value (Value(..),vequal,isTruthy)
 
@@ -19,13 +19,14 @@ execute = \case
 execDecl :: (Value -> Eff a) -> Env Value -> Decl -> (Env Value -> Eff a) -> Eff a
 execDecl ret env = \case
   DVarDecl id e -> \k -> do
-    v <- evaluate env e
-    env' <- insertEnv env id v
-    k env'
+    r <- evaluate env e >>= NewRef
+    k (insertEnv env id r)
   DFunDecl fname formals body -> \k -> do
-    let vf = VClosure {fname,formals,body,env}
-    env' <- insertEnv env fname vf
-    k env'
+    r <- NewRef VNil
+    env <- pure $ insertEnv env fname r
+    let v = VClosure {fname,formals,body,env}
+    WriteRef v r
+    k (insertEnv env fname r)
   DStat stat -> \k -> do
     execStat ret env stat (k env)
 
@@ -139,17 +140,8 @@ evalOp2 pos v1 v2 = \case
 
 vapply :: Pos -> Value -> [Value] -> Eff Value
 vapply pos func args = case func of
-  VClosure{fname,formals,body,env} -> do
-    checkArity formals args
-    let
-      bindArgs :: Env Value -> [(Identifier,Value)] -> Eff (Env Value)
-      bindArgs env = \case
-        [] -> pure env
-        (x,v):more -> do
-          env' <- insertEnv env x v
-          bindArgs env' more
-
-    env <- insertEnv env fname func
+  VClosure{formals,body,env} -> do
+    checkArity pos (length formals) (length args)
     env <- bindArgs env (zip formals args)
     let ret = pure
     let k = ret VNil
@@ -158,9 +150,18 @@ vapply pos func args = case func of
     runtimeError pos "Can only call functions and classes."
 
   where
-    checkArity formals args =
-      if length formals == length args then pure () else
-        runtimeError pos (printf "Expected %d arguments but got %d." (length formals) (length args))
+
+checkArity :: Pos -> Int -> Int -> Eff ()
+checkArity pos formals args =
+  if formals == args then pure () else
+    runtimeError pos (printf "Expected %d arguments but got %d." formals args)
+
+bindArgs :: Env Value -> [(Identifier,Value)] -> Eff (Env Value)
+bindArgs env = \case
+  [] -> pure env
+  (x,v):more -> do
+    r <- NewRef v
+    bindArgs (insertEnv env x r) more
 
 vnegate :: Pos -> Value -> Eff Value
 vnegate pos v1 = do
