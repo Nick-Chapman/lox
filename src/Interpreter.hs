@@ -1,7 +1,8 @@
 module Interpreter (execute) where
 
 import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
-import Environment (Env,emptyEnv,insertEnv,lookupEnv)
+import Data.Map (Map)
+import Data.Map qualified as Map
 import Par4 (Pos(..))
 import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef),Ref)
 import Text.Printf (printf)
@@ -37,6 +38,13 @@ close env Identifier{name} formals body = VFunc name $ \pos args -> do
   let ret = pure
   let k = ret VNil
   execStat ret env body k
+
+bindArgs :: Env Value -> [(Identifier,Value)] -> Eff (Env Value)
+bindArgs env = \case
+  [] -> pure env
+  (x,v):more -> do
+    r <- NewRef v
+    bindArgs (insertEnv env x r) more
 
 execStat :: (Value -> Eff a) -> Env Value -> Stat -> Eff a -> Eff a
 execStat ret env = \case
@@ -116,6 +124,18 @@ evaluate env = eval where
         let Identifier{pos,name} = x
         runtimeError pos (printf "Undefined variable '%s'." name)
 
+data Env v = Env (Map String (Ref v))
+
+emptyEnv :: Env v
+emptyEnv = Env Map.empty
+
+insertEnv :: Env v -> Identifier -> Ref v -> Env v
+insertEnv (Env m) Identifier{name} r = do
+  Env (Map.insert name r m)
+
+lookupEnv :: Env v -> Identifier -> Maybe (Ref v)
+lookupEnv (Env m) Identifier{name} = Map.lookup name m
+
 evalLit :: Lit -> Value
 evalLit = \case
   LNil{} -> VNil
@@ -155,13 +175,6 @@ checkArity :: Pos -> Int -> Int -> Eff ()
 checkArity pos formals args =
   if formals == args then pure () else
     runtimeError pos (printf "Expected %d arguments but got %d." formals args)
-
-bindArgs :: Env Value -> [(Identifier,Value)] -> Eff (Env Value)
-bindArgs env = \case
-  [] -> pure env
-  (x,v):more -> do
-    r <- NewRef v
-    bindArgs (insertEnv env x r) more
 
 vnegate :: Pos -> Value -> Eff Value
 vnegate pos v1 = do

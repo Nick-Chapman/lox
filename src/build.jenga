@@ -27,14 +27,12 @@ packages:
 
 # These dependencies are not discovered by gcc -M (not sure why)
 xdepends:
-  echo 'Environment.o : Par4.hi' >> $@
   echo 'Interpreter.o : Par4.hi' >> $@
   echo 'Value.o : Par4.hi' >> $@
   echo 'Value.o : Runtime.hi' >> $@
   echo 'Lox.o : Ast.hi' >> $@
   echo 'Lox.o : Par4.hi' >> $@
   echo 'Lox.o : Runtime.hi' >> $@
-  echo 'Lox.o : Environment.hi' >> $@
   echo 'Lox.o : Value.hi' >> $@
   echo 'main.o : Par4.hi' >> $@
   echo 'main.o : Ast.hi' >> $@
@@ -42,4 +40,3 @@ xdepends:
   echo 'main.o : Interpreter.hi' >> $@
   echo 'main.o : Runtime.hi' >> $@
   echo 'Interpreter.o : Runtime.hi' >> $@
-  echo 'Interpreter.o : Environment.hi' >> $@
