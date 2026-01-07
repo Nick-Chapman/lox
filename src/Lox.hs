@@ -1,7 +1,7 @@
 module Lox (main) where
 
 import Data.Text qualified as Text
-import Interpreter qualified (emptyEnv,executeTopDecls)
+import Interpreter qualified (executeTopDecls)
 import Parser qualified (tryParse)
 import Runtime (runEffect)
 import System.Environment (getArgs)
@@ -19,8 +19,7 @@ main = do
       case (Parser.tryParse contents) of
         Left err -> abort 65 err
         Right decls -> do
-          let globals = Interpreter.emptyEnv
-          Runtime.runEffect putOut (Interpreter.executeTopDecls globals decls) >>= \case
+          Runtime.runEffect putOut (Interpreter.executeTopDecls decls) >>= \case
             Right _globals' -> do
               -- if/when support repl, we have the updated globals in hand
               pure ()

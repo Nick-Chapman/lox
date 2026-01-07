@@ -1,22 +1,33 @@
-module Interpreter (executeTopDecls,emptyEnv) where
+module Interpreter (executeTopDecls) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Data.Map qualified as Map
 import Par4 (Pos(..))
-import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef),Ref)
+import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef,Clock),Ref)
 import Text.Printf (printf)
 import Value (Value(..),Env(..),vequal,isTruthy)
 
 emptyEnv :: Env
 emptyEnv = Env Map.empty
 
-executeTopDecls :: Env -> [Stat] -> Eff Env
-executeTopDecls globals = \case
+executeTopDecls :: [Stat] -> Eff Env
+executeTopDecls decls = do
+  r <- NewRef vClock
+  let globals = insertEnv emptyEnv (Identifier (Pos 0 0) "clock") r
+  executeDecls globals decls
+
+vClock :: Value
+vClock = VFunc "<native fn>" $  \_globals pos args -> do
+  checkArity pos 0 (length args)
+  VNumber <$> Clock
+
+executeDecls :: Env -> [Stat] -> Eff Env
+executeDecls globals = \case
   [] -> pure globals
   d1:ds -> do
     let ret _v = error "return at top level"
     execStat globals ret globals d1 $ \globals ->
-      executeTopDecls globals ds
+      executeDecls globals ds
 
 execStat :: Env -> (Value -> Eff a) -> Env -> Stat -> (Env -> Eff a) -> Eff a
 execStat globals ret = execute where
@@ -61,7 +72,7 @@ execStat globals ret = execute where
       k (insertEnv env fname r)
 
 close :: Env -> Identifier -> [Identifier] -> Stat -> Value
-close env Identifier{name} formals body = VFunc name $ \globals pos args -> do
+close env Identifier{name} formals body = VFunc (printf "<fn %s>" name) $ \globals pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
   let ret = pure

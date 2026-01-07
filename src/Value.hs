@@ -23,7 +23,7 @@ instance Show Value where
       let s = printf "%f" n
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
-    VFunc name _  -> printf "<fn %s>" name
+    VFunc name _  -> name
 
 isTruthy :: Value -> Bool
 isTruthy = \case
