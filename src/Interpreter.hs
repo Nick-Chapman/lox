@@ -1,6 +1,6 @@
 module Interpreter (execute,emptyEnv) where
 
-import Ast (Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Data.Map qualified as Map
 import Par4 (Pos(..))
 import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef),Ref)
@@ -10,33 +10,66 @@ import Value (Value(..),Env(..),vequal,isTruthy)
 emptyEnv :: Env
 emptyEnv = Env Map.empty
 
-execute :: Env -> [Decl] -> Eff Env
+execute :: Env -> [Stat] -> Eff Env
 execute globals = \case
   [] -> pure globals
   d1:ds -> do
     let ret _v = error "return at top level"
-    execDecl globals ret globals d1 $ \globals ->
+    execStat globals ret globals d1 $ \globals ->
       execute globals ds
 
-execDecl :: Env -> (Value -> Eff a) -> Env -> Decl -> (Env -> Eff a) -> Eff a
-execDecl globals ret env = \case
-  DVarDecl id e -> \k -> do
+execStat :: Env -> (Value -> Eff a) -> Env -> Stat -> (Env -> Eff a) -> Eff a
+execStat globals ret env = \case
+  SReturn _pos exp -> \_ignored_k -> do
+    v <- evaluate globals env exp
+    ret v
+  SExp e -> \k -> do
+    _ <- evaluate globals env e
+    k env
+  SPrint e -> \k -> do
+    v <- evaluate globals env e
+    Runtime.Print (show v)
+    k env
+  SBlock stats -> \k -> do
+    let
+      finish = k env
+      loop env ds = case ds of
+        [] -> finish
+        d1:ds -> do
+          execStat globals ret env d1 $ \env ->
+            loop env ds
+    loop env stats
+  SIf cond s1 s2 -> \k -> do
+    v <- evaluate globals env cond
+    if isTruthy v then execStat globals ret env s1 k else execStat globals ret env s2 k
+  again@(SWhile cond body) -> \k -> do
+    v <- evaluate globals env cond
+    if not (isTruthy v) then k env else do
+      execStat globals ret env body $ \_env -> execStat globals ret env again k
+  SFor (init,cond,update) body -> \k -> do
+    let deSugared :: Stat = SBlock
+          [ init
+          , SWhile cond $
+            SBlock [ body
+                   , update
+                   ]
+          ]
+    execStat globals ret env deSugared k
+  SVarDecl id e -> \k -> do
     r <- evaluate globals env e >>= NewRef
     k (insertEnv env id r)
-  DFunDecl fname formals body -> \k -> do
+  SFunDecl fname formals body -> \k -> do
     r <- NewRef VNil
     env <- pure $ insertEnv env fname r
     WriteRef r (close env fname formals body)
     k (insertEnv env fname r)
-  DStat stat -> \k -> do
-    execStat globals ret env stat (k env)
 
 close :: Env -> Identifier -> [Identifier] -> Stat -> Value
 close env Identifier{name} formals body = VFunc name $ \globals pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
   let ret = pure
-  let k = ret VNil
+  let k _ = ret VNil
   execStat globals ret env body k
 
 bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
@@ -45,42 +78,6 @@ bindArgs env = \case
   (x,v):more -> do
     r <- NewRef v
     bindArgs (insertEnv env x r) more
-
-execStat :: Env -> (Value -> Eff a) -> Env -> Stat -> Eff a -> Eff a
-execStat globals ret env = \case
-  SReturn _pos exp -> \_ignored_k -> do
-    v <- evaluate globals env exp
-    ret v
-  SExp e -> \k -> do
-    _ <- evaluate globals env e
-    k
-  SPrint e -> \k -> do
-    v <- evaluate globals env e
-    Runtime.Print (show v)
-    k
-  SBlock decls -> loop env decls
-    where
-      loop env ds k = case ds of
-        [] -> k
-        d1:ds -> do
-          execDecl globals ret env d1 $ \env ->
-            loop env ds k
-  SIf cond s1 s2 -> \k -> do
-    v <- evaluate globals env cond
-    if isTruthy v then execStat globals ret env s1 k else execStat globals ret env s2 k
-  again@(SWhile cond body) -> \k -> do
-    v <- evaluate globals env cond
-    if not (isTruthy v) then k else do
-      execStat globals ret env body (execStat globals ret env again k)
-  SFor (init,cond,update) body -> \k -> do
-    let deSugared :: Stat = SBlock
-          [ init
-          , DStat $ SWhile cond $
-            SBlock [ DStat body
-                   , DStat update
-                   ]
-          ]
-    execStat globals ret env deSugared k
 
 evaluate :: Env -> Env -> Exp -> Eff Value
 evaluate globals env = eval where

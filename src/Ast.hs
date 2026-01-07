@@ -1,23 +1,17 @@
-module Ast (Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..)) where
+module Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..)) where
 
 import Par4 (Pos)
-
--- TODO merge Decl and Stat -- semantically they are the same class
--- conversion always possible via DStat/SBlock
-
-data Decl
-  = DStat Stat
-  | DVarDecl Identifier Exp
-  | DFunDecl Identifier [Identifier] Stat
 
 data Stat
   = SExp Exp
   | SPrint Exp
-  | SBlock [Decl]
+  | SBlock [Stat]
   | SIf Exp Stat Stat
   | SWhile Exp Stat
-  | SFor (Decl,Exp,Stat) Stat
+  | SFor (Stat,Exp,Stat) Stat
   | SReturn Pos Exp
+  | SVarDecl Identifier Exp
+  | SFunDecl Identifier [Identifier] Stat
 
 data Exp
   = ELit Lit

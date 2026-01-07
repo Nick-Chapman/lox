@@ -1,15 +1,15 @@
 module Parser (tryParse) where
 
-import Ast (Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Par4 (parse,Par,lit,sat,alts,noError,skip,position,reject,separated)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
 
-tryParse :: String -> Either String [Decl]
+tryParse :: String -> Either String [Stat]
 tryParse = Par4.parse "Expect expression" start
 
-start :: Par [Decl]
+start :: Par [Stat]
 start = program where
 
   keywords =
@@ -34,9 +34,7 @@ start = program where
     whitespace
     many decl
 
-  decl = alts [funDecl, varDecl, statDecl]
-
-  statDecl = DStat <$> stat
+  decl = alts [funDecl, varDecl, stat]
 
   varDecl = do
     key "var"
@@ -46,14 +44,14 @@ start = program where
       , pure (ELit LNil)
       ]
     key ";"
-    pure (DVarDecl x eopt)
+    pure (SVarDecl x eopt)
 
   funDecl = do
     key "fun"
     name <- identifier "fun-name"
     xs <- parameters
     body <- blockStat
-    pure (DFunDecl name xs body)
+    pure (SFunDecl name xs body)
 
   identifier :: String -> Par Identifier
   identifier expect = nibble $ do
@@ -83,8 +81,8 @@ start = program where
     key "("
     init <- alts
       [ varDecl
-      , DStat <$> expressionStat
-      , do key ";"; pure (DStat (SBlock []))
+      , expressionStat
+      , do key ";"; pure (SBlock [])
       ]
     cond <- alts
       [ expression
