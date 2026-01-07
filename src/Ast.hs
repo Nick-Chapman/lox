@@ -10,7 +10,7 @@ data Prog
 
 data Decl
   = DStat Stat
-  | DVarDecl Identifier (Maybe Exp)
+  | DVarDecl Identifier Exp
   | DFunDecl Identifier [Identifier] Stat
 
 data Stat

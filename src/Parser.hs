@@ -2,7 +2,7 @@ module Parser (tryParse) where
 
 import Ast (Prog(..),Decl(..),Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
-import Par4 (parse,Par,lit,sat,alts,opt,noError,skip,position,reject,separated)
+import Par4 (parse,Par,lit,sat,alts,noError,skip,position,reject,separated)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
 
@@ -41,7 +41,10 @@ start = program where
   varDecl = do
     key "var"
     x <- identifier "variable name"
-    eopt <- opt $ do key "="; expression
+    eopt <- alts
+      [ do key "="; expression
+      , pure (ELit LNil)
+      ]
     key ";"
     pure (DVarDecl x eopt)
 
