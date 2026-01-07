@@ -5,7 +5,7 @@ import Control.Applicative (many,some)
 import Data.Text (Text)
 import Par4 (parse,Par,char,lit,sat,alts,noError,skip,position,reject)
 import Text.Printf (printf)
-import qualified Data.Char as Char (isAlpha,isNumber,isDigit)
+import qualified Data.Char as Char (isAlpha,isDigit)
 
 tryParse :: Text -> Either String [Stat]
 tryParse = Par4.parse start
@@ -39,30 +39,20 @@ start = program where
 
   varDecl = do
     key "var"
-    x <- identifier "variable name"
+    x <- varName "variable name"
     eopt <- alts
-      [ do key "="; expression
+      [ do sym "="; expression
       , pure (ELit LNil)
       ]
-    key ";"
+    sym ";"
     pure (SVarDecl x eopt)
 
   funDecl = do
     key "fun"
-    name <- identifier "fun-name"
+    name <- varName "fun-name"
     xs <- parameters
     body <- blockStat
     pure (SFunDecl name xs body)
-
-  identifier :: String -> Par Identifier
-  identifier expect = nibble $ do
-    pos <- position
-    x <- alpha
-    xs <- many (alts [alpha,digit,sat (=='_')])
-    let name = x:xs
-    if name `notElem` keywords then pure (Identifier { pos, name }) else do
-      let message = printf "Error at '%s': Expect %s." name expect
-      reject pos message
 
   stat =
     alts [returnStat, forStat, whileStat, ifStat, printStat, blockStat, expressionStat]
@@ -74,25 +64,25 @@ start = program where
       [ expression
       , pure (ELit LNil)
       ]
-    key ";"
+    sym ";"
     pure (SReturn pos e)
 
   forStat = do
     key "for"
-    key "("
+    sym "("
     init <- alts
       [ varDecl
-      , do key ";"; pure (SBlock [])
+      , do sym ";"; pure (SBlock [])
       , expressionStat
       ]
     cond <- alts
       [ expression
       , pure (ELit (LBool True))
       ]
-    key ";"
+    sym ";"
     update <- alts
-      [ do e <- expression; key ")"; pure (SExp e)
-      , do key ")"; pure (SBlock [])
+      [ do e <- expression; sym ")"; pure (SExp e)
+      , do sym ")"; pure (SBlock [])
       , expectExpression
       ]
     body <- stat
@@ -114,7 +104,7 @@ start = program where
   printStat = do
     key "print"
     alts
-      [ do e <- expression; key ";"; pure (SPrint e)
+      [ do e <- expression; sym ";"; pure (SPrint e)
       , expectExpression
       ]
 
@@ -122,20 +112,20 @@ start = program where
 
   expressionStat = do
     e <- expression
-    key ";"
+    sym ";"
     pure (SExp e)
 
   blockStat = do
-    key "{"
+    sym "{"
     xs <- many decl
-    key "}"
+    sym "}"
     pure (SBlock xs)
 
   expression = assign
 
   assign = do
     e1 <- logicalOr
-    alts [ do pos <- position; key "="
+    alts [ do pos <- position; sym "="
               case e1 of
                 EVar x1 -> do
                   e2 <- assign
@@ -155,7 +145,7 @@ start = program where
   bin :: String -> Op2 -> Par (Exp -> Exp -> Exp)
   bin name op = do
     pos <- position
-    key name
+    sym name
     pure (\e1 e2 -> EBinary pos e1 op e2)
 
   equality = leftAssoc comparison $ alts
@@ -182,8 +172,8 @@ start = program where
 
   unary =
     alts [ do pos <- position
-              op <- alts [ do key "-"; pure Negate
-                         , do key "!"; pure Not
+              op <- alts [ do sym "-"; pure Negate
+                         , do sym "!"; pure Not
                          ]
               e <- unary
               pure (EUnary pos op e)
@@ -207,8 +197,8 @@ start = program where
     where
       err = reject_next (printf "Can't have more than %d parameters." max)
       someArgs n = if n == 0 then err else do
-        e <- identifier "param"
-        es <- alts [ pure [], do key ","; someArgs (n-1) ]
+        e <- varName "param"
+        es <- alts [ pure [], do sym ","; someArgs (n-1) ]
         pure (e:es)
 
 
@@ -218,15 +208,23 @@ start = program where
       err = reject_next (printf "Can't have more than %d arguments." max)
       someArgs n = if n == 0 then err else do
         e <- expression
-        es <- alts [ pure [], do key ","; someArgs (n-1) ]
+        es <- alts [ pure [], do sym ","; someArgs (n-1) ]
         pure (e:es)
 
   primary :: Par Exp
   primary = alts
     [ ELit <$> literal
-    , EVar <$> identifier "expression"
+    , EVar <$> varName "expression"
     , EGrouping <$> bracketed expression
     ]
+
+  varName :: String -> Par Identifier
+  varName expect = nibble $ do
+    pos <- position
+    name <- identifier
+    if name `notElem` keywords then pure (Identifier { pos, name }) else do
+      let message = printf "Error at '%s': Expect %s." name expect
+      reject pos message
 
   literal :: Par Lit
   literal = alts
@@ -248,9 +246,9 @@ start = program where
              ]
 
   bracketed par = do
-    key "("
+    sym "("
     x <- par
-    key ")"
+    sym ")"
     pure x
 
   numberLit = alts [nibble (read <$> numberChars), badNumberLit]
@@ -288,11 +286,19 @@ start = program where
     c <- char
     reject pos (printf "Error at %s: %s" (show c) msg)
 
+  sym s = nibble (noError (mapM_ lit s))
+
   key s =
-    if all isIdentifierChar s && s `notElem` keywords
-    then error (printf "Add \"%s\" to keywords list" s)
-    else nibble (noError (mapM_ lit s))
-    where isIdentifierChar c = Char.isNumber c || Char.isAlpha c || c `elem` "'_"
+    if s `notElem` keywords then error (printf "Add \"%s\" to keywords list" s) else do
+      nibble $ noError $ do
+        s' <- identifier
+        if s == s' then pure () else alts []
+
+  identifier :: Par String
+  identifier = do
+    x <- alpha
+    xs <- many (alts [alpha,digit,sat (=='_')])
+    pure (x:xs)
 
   nibble par = do
     x <- par

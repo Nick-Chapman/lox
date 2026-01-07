@@ -24,7 +24,7 @@ test/function/local_recursion.lox
 test/function/missing_arguments.lox
 #test/function/missing_comma_in_parameters.lox
 test/function/mutual_recursion.lox
-#test/function/nested_call_with_arguments.lox
+test/function/nested_call_with_arguments.lox
 test/function/parameters.lox
 #test/function/print.lox
 test/function/recursion.lox
