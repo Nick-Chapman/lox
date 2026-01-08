@@ -51,16 +51,13 @@ data K4 pos a b = K4
   { eps :: a -> Res b
   , succ :: pos -> Text -> a -> Res b
   , fail :: Res b
-  , err :: pos -> Msg -> Res b
+  , err :: pos -> String -> Res b
   }
 
 type Res a = Either String a
 
-data Msg = XMessage String
-
-defaultErrorMsg :: Text -> String
-defaultErrorMsg text =
-  printf "Error: Unexpected %s." (ppNextChar text)
+unexpected :: Text -> String
+unexpected text = printf "Error: Unexpected %s." (ppNextChar text)
   where
     ppNextChar :: Text -> String
     ppNextChar t =
@@ -68,35 +65,28 @@ defaultErrorMsg text =
         Nothing -> "EOF"
         Just (c,_) -> show c
 
-mkFinish :: forall pos a. Config pos a -> Text -> K4 pos a a
-mkFinish config@Config{initPos} text0 = do
-  K4 { eps = mkYes initPos text0
-     , succ = mkYes
-     , fail = mkNo initPos (XMessage (defaultErrorMsg text0))
-     , err = mkNo
-     }
+runParser :: forall pos a. Config pos a -> Text -> Either String a
+runParser Config{start,initPos,tickPos,showPos} text0 =
+  run initPos text0 start finish
   where
-    mkNo :: pos -> Msg -> Res a
-    mkNo pos msg = Left $ prefixPos config pos msg
 
-    mkYes :: pos -> Text -> a -> Res a
-    mkYes pos text a = do
-      if Text.null text then Right a else do
-        Left $ prefixPos config pos (XMessage (defaultErrorMsg text))
+    finish =
+      K4 { eps = yes initPos text0
+         , succ = yes
+         , fail = nope initPos (unexpected text0)
+         , err = nope
+         }
+      where
+        yes pos text a = if Text.null text then Right a else do nope pos (unexpected text)
+        nope pos mes = Left $ printf "%s %s" (showPos pos) mes
 
-prefixPos :: Config pos a -> pos -> Msg -> String -- TODO: inline
-prefixPos Config{showPos} pos (XMessage msg) = printf "%s %s" (showPos pos) msg
 
-runParser :: forall pos x. Config pos x -> Text -> Either String x
-runParser config@Config{start,initPos,tickPos} text0 =
-  run initPos text0 start (mkFinish config text0)
-  where
-    run :: pos -> Text -> Par pos a -> K4 pos a b -> Res b
+    run :: forall a b. pos -> Text -> Par pos a -> K4 pos a b -> Res b
     run p t par k@K4{eps,succ,fail,err} = case par of
 
       Position -> eps p
 
-      Reject pos message -> err pos (XMessage message)
+      Reject pos message -> err pos message
 
       Ret x -> eps x
 
@@ -111,7 +101,7 @@ runParser config@Config{start,initPos,tickPos} text0 =
         run p t par K4 { eps = eps
                        , succ = succ
                        , fail = fail
-                       , err = \_p _msg -> fail
+                       , err = \_p _mes -> fail
                        }
 
       Alt par1 par2 -> do
@@ -132,7 +122,7 @@ runParser config@Config{start,initPos,tickPos} text0 =
                                  run p t (f a) K4{ eps = \a -> succ p t a -- consume
                                                  , succ
                                                  , fail = do
-                                                     err p (XMessage (defaultErrorMsg t))  -- fail->error
+                                                     err p (unexpected t)  -- fail->error
                                                  , err
                                                  }
                       , fail
