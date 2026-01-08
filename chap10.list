@@ -17,12 +17,12 @@ test/for/closure_in_body.lox
 test/for/return_closure.lox
 test/for/return_inside.lox
 test/for/syntax.lox
-#test/function/body_must_be_block.lox
+test/function/body_must_be_block.lox
 test/function/empty_body.lox
 test/function/extra_arguments.lox
 test/function/local_recursion.lox
 test/function/missing_arguments.lox
-#test/function/missing_comma_in_parameters.lox
+test/function/missing_comma_in_parameters.lox
 test/function/mutual_recursion.lox
 test/function/nested_call_with_arguments.lox
 test/function/parameters.lox
@@ -37,7 +37,7 @@ test/return/after_if.lox
 test/return/after_while.lox
 test/return/in_function.lox
 test/return/return_nil_if_no_value.lox
-#test/unexpected_character.lox
+test/unexpected_character.lox
 test/while/closure_in_body.lox
 test/while/return_closure.lox
 test/while/return_inside.lox

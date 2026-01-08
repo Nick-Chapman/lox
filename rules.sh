@@ -9,14 +9,14 @@ cat <<EOF
 
 $x.lox : $abs : ln $abs $x.lox
 
-$x.expect : $x.lox
-   ~/other/craftinginterpreters/clox $x.lox > $x.expect 2>&1 || true
+$x.expect : $x.lox looseErrorDetails.sh
+  ~/other/craftinginterpreters/clox $x.lox 2>&1 | ./looseErrorDetails.sh > $x.expect  || true
 
-$x.actual : $x.lox src/lox.exe removeCol.sh
-  ./lox.exe $x.lox > $x.actual 2>&1 || true
+$x.actual : $x.lox src/lox.exe removeCol.sh looseErrorDetails.sh
+  ./lox.exe $x.lox 2>&1 | ./removeCol.sh | ./looseErrorDetails.sh > $x.actual  || true
 
-*test-$x: $x.expect $x.actual removeCol.sh
-  cat $x.actual | ./removeCol.sh | git diff --color $x.expect -
+*test-$x: $x.expect $x.actual
+  git diff --color $x.expect $x.actual
 
 EOF
 
