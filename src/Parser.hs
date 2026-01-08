@@ -14,18 +14,19 @@ type Token = Char
 type Par = Par4.Par Pos Token
 
 tryParse :: Text -> Either String [Stat]
-tryParse = Par4.runParser Par4.Config
+tryParse = either (Left . formatError) Right . Par4.runParser Par4.Config
   { start
   , initPos
   , tickPos
-  , showPos
   , scanToken = Text.uncons
-  , unexpectedMessage
   }
-  where
-    unexpectedMessage :: Maybe Char -> String
-    unexpectedMessage =
-      printf "Error: Unexpected %s." . \case Just x -> show x; Nothing -> "EOF"
+
+formatError :: (Pos,Text,Maybe String) -> String
+formatError (pos,text,opt) = do
+  let tok = case Text.uncons text of Nothing -> "EOF"; Just (x,_) -> show x
+  printf "%s Error%s" (showPos pos) $ case opt of
+    Just mes -> mes
+    Nothing -> printf ": Unexpected %s." tok
 
 start :: Par [Stat]
 start = program where
@@ -139,12 +140,12 @@ start = program where
 
   assign = do
     e1 <- logicalOr
-    alts [ do pos <- position; sym "="
+    alts [ do sym "="
               case e1 of
                 EVar x1 -> do
                   e2 <- assign
                   pure (EAssign x1 e2)
-                _ -> reject pos "Error at '=': Invalid assignment target."
+                _ -> reject " at '=': Invalid assignment target."
          , pure e1
          ]
 
@@ -225,6 +226,11 @@ start = program where
         es <- alts [ pure [], do sym ","; someArgs (n-1) ]
         pure (e:es)
 
+  reject_next :: String -> Par a
+  reject_next msg = do
+    c <- next
+    reject (printf " at %s: %s" (show c) msg)
+
   primary :: Par Exp
   primary = alts
     [ ELit <$> literal
@@ -237,8 +243,8 @@ start = program where
     pos <- position
     name <- identifier
     if name `notElem` keywords then pure (Identifier { pos, name }) else do
-      let message = printf "Error at '%s': Expect %s." name expect
-      reject pos message
+      let message = printf " at '%s': Expect %s." name expect
+      reject message
 
   literal :: Par Lit
   literal = alts
@@ -277,28 +283,19 @@ start = program where
           ]
 
   badNumberLit = do
-    pos <- position
     lit '.'
-    reject pos "Error at '.': Expect expression."
+    reject " at '.': Expect expression."
 
   stringLit = nibble $ do
     doubleQuote
     x <- many stringLitChar
-    pos <- position
     alts [doubleQuote
-         , reject pos "Error: Unterminated string."
+         , reject ": Unterminated string."
          ]
     pure x
     where
       doubleQuote = lit '"'
       stringLitChar = sat $ \c -> c /= '"'
-
-
-  reject_next :: String -> Par a
-  reject_next msg = do
-    pos <- position
-    c <- next
-    reject pos (printf "Error at %s: %s" (show c) msg)
 
   sym s = nibble (noError (mapM_ lit s))
 

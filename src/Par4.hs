@@ -7,16 +7,13 @@ module Par4
 import Control.Applicative (Alternative,empty,(<|>))
 import Control.Monad (ap,liftM)
 import Data.Text (Text)
-import Text.Printf (printf)
 
 data Config pos tok a where
   Config ::
     { start :: Par pos tok a
     , initPos :: pos
     , tickPos :: pos -> tok -> pos
-    , showPos :: pos -> String
     , scanToken :: Text -> Maybe (tok,Text)
-    , unexpectedMessage :: Maybe tok -> String
     } -> Config pos tok a
 
 alts :: [Par pos tok a] -> Par pos tok a
@@ -24,7 +21,7 @@ lit :: Eq tok => tok -> Par pos tok ()
 sat :: (tok -> Bool) -> Par pos tok tok
 noError :: Par pos tok a -> Par pos tok a
 position :: Par pos tok pos
-reject :: pos -> String -> Par pos tok a
+reject :: String -> Par pos tok a
 
 instance Alternative (Par pos tok) where empty = Fail; (<|>) = Alt
 instance Applicative (Par pos tok) where pure = Ret; (<*>) = ap
@@ -40,7 +37,7 @@ reject = Reject
 
 data Par pos tok a where
   Position :: Par pos tok pos
-  Reject :: pos -> String -> Par pos tok a
+  Reject :: String -> Par pos tok a
   Ret :: a -> Par pos tok a
   Bind :: Par pos tok a -> (a -> Par pos tok b) -> Par pos tok b
   Fail :: Par pos tok a
@@ -49,42 +46,40 @@ data Par pos tok a where
   Alt :: Par pos tok a -> Par pos tok a -> Par pos tok a
 
 data K4 pos a b = K4
-  { eps :: a -> Res b
-  , succ :: pos -> Text -> a -> Res b
-  , fail :: Res b
-  , err :: pos -> String -> Res b
+  { eps :: a -> Res pos b
+  , succ :: pos -> Text -> a -> Res pos b
+  , fail :: Res pos b
+  , err :: pos -> Text -> Maybe String -> Res pos b
   }
 
-type Res a = Either String a
+type Res pos a = Either (pos,Text,Maybe String) a
 
-runParser :: forall pos tok a. Config pos tok a -> Text -> Either String a
-runParser Config{start,initPos,tickPos,showPos,scanToken,unexpectedMessage} text0 =
+runParser :: forall pos tok a. Config pos tok a -> Text -> Res pos a
+runParser Config{start,initPos,tickPos,scanToken} text0 =
   run initPos text0 start finish
   where
-
-    defaultErr :: Text -> String
-    defaultErr text = unexpectedMessage (fst <$> scanToken text)
 
     finish =
       K4 { eps = yes initPos text0
          , succ = yes
-         , fail = nope initPos (defaultErr text0)
+         , fail = nope initPos text0 Nothing
          , err = nope
          }
       where
-        nope pos mes = Left $ printf "%s %s" (showPos pos) mes
+        nope :: pos -> Text -> Maybe String -> Res pos a
+        nope pos text mes = Left (pos, text, mes)
         yes pos text a =
           case scanToken text of
             Nothing -> Right a
-            Just{} -> nope pos (defaultErr text)
+            Just{} -> nope pos text Nothing
 
 
-    run :: forall a b. pos -> Text -> Par pos tok a -> K4 pos a b -> Res b
+    run :: forall a b. pos -> Text -> Par pos tok a -> K4 pos a b -> Res pos b
     run p t par k@K4{eps,succ,fail,err} = case par of
 
       Position -> eps p
 
-      Reject pos message -> err pos message
+      Reject message -> err p t (Just message)
 
       Ret x -> eps x
 
@@ -99,7 +94,7 @@ runParser Config{start,initPos,tickPos,showPos,scanToken,unexpectedMessage} text
         run p t par K4 { eps = eps
                        , succ = succ
                        , fail = fail
-                       , err = \_p _mes -> fail
+                       , err = \_p _t _mes -> fail
                        }
 
       Alt par1 par2 -> do
@@ -119,8 +114,7 @@ runParser Config{start,initPos,tickPos,showPos,scanToken,unexpectedMessage} text
                       , succ = \p t a ->
                                  run p t (f a) K4{ eps = \a -> succ p t a -- consume
                                                  , succ
-                                                 , fail = do
-                                                     err p (defaultErr t)  -- fail->error
+                                                 , fail = err p t Nothing  -- fail->error
                                                  , err
                                                  }
                       , fail
