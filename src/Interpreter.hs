@@ -25,17 +25,19 @@ executeDecls :: Env -> [Stat] -> Eff Env
 executeDecls globals = \case
   [] -> pure globals
   d1:ds -> do
-    let ret _v = error "return at top level"
+    let ret = Nothing
     execStat globals ret globals d1 $ \globals ->
       executeDecls globals ds
 
-execStat :: Env -> (Value -> Eff a) -> Env -> Stat -> (Env -> Eff a) -> Eff a
+execStat :: Env -> Maybe (Value -> Eff a) -> Env -> Stat -> (Env -> Eff a) -> Eff a
 execStat globals ret = execute where
 
   execute env = \case
-    SReturn _pos exp -> \_ignored_k -> do
+    SReturn pos exp -> \_ignored_k -> do
       v <- evaluate globals env exp
-      ret v
+      case ret of
+        Just r -> r v
+        Nothing -> runtimeError pos "Can't return from top-level code."
     SExp e -> \k -> do
       _ <- evaluate globals env e
       k env
@@ -75,8 +77,8 @@ close :: Env -> Identifier -> [Identifier] -> Stat -> Value
 close env Identifier{name} formals body = VFunc (printf "<fn %s>" name) $ \globals pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
-  let ret = pure
-  let k _ = ret VNil
+  let ret = Just (\v -> pure v)
+  let k _ = pure VNil
   execStat globals ret env body k
 
 bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
