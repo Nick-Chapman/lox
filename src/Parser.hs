@@ -81,10 +81,10 @@ start = program where
       ]
     sym ";"
     update <- alts
-      [ do e <- expression; sym ")"; pure (SExp e)
-      , do sym ")"; pure (SBlock [])
-      , expectExpression
+      [ do e <- expression; pure (SExp e)
+      , do pure (SBlock [])
       ]
+    sym ")"
     body <- stat
     pure (SFor (init,cond,update) body)
 
@@ -103,12 +103,9 @@ start = program where
 
   printStat = do
     key "print"
-    alts
-      [ do e <- expression; sym ";"; pure (SPrint e)
-      , expectExpression
-      ]
-
-  expectExpression = reject_next "Expect expression."
+    e <- expression
+    sym ";"
+    pure (SPrint e)
 
   expressionStat = do
     e <- expression
