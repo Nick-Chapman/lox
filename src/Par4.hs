@@ -1,4 +1,8 @@
-module Par4 (parse,Par,lit,sat,alts,noError,reject,Pos(..),position) where
+module Par4
+  ( runParser
+  , Config(..), Par
+  , lit,sat,alts,noError,reject,position
+  ) where
 
 import Control.Applicative (Alternative,empty,(<|>))
 import Control.Monad (ap,liftM)
@@ -6,17 +10,20 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Text.Printf (printf)
 
-instance Alternative Par where empty = Fail; (<|>) = Alt
-instance Applicative Par where pure = Ret; (<*>) = ap
-instance Functor Par where fmap = liftM
-instance Monad Par where (>>=) = Bind
+data Config pos a where
+  Config ::
+    { start :: Par pos a
+    , initPos :: pos
+    , tickPos :: pos -> Char -> pos
+    , showPos :: pos -> String
+    } -> Config pos a
 
-alts :: [Par a] -> Par a
-lit :: Char -> Par ()
-sat :: (Char -> Bool) -> Par Char
-noError :: Par a -> Par a
-position :: Par Pos
-reject :: Pos -> String -> Par a
+alts :: [Par pos a] -> Par pos a
+lit :: Char -> Par pos ()
+sat :: (Char -> Bool) -> Par pos Char
+noError :: Par pos a -> Par pos a
+position :: Par pos pos
+reject :: pos -> String -> Par pos a
 
 alts = foldl Alt empty
 lit x = do _ <- sat (== x); pure ()
@@ -25,33 +32,31 @@ noError = NoError
 position = Position
 reject = Reject
 
-data Par a where
-  Position :: Par Pos
-  Ret :: a -> Par a
-  Bind :: Par a -> (a -> Par b) -> Par b
-  Fail :: Par a
-  Satisfy :: (Char -> Bool) -> Par Char
-  NoError :: Par a -> Par a
-  Alt :: Par a -> Par a -> Par a
-  Reject :: Pos -> String -> Par a
+instance Alternative (Par pos) where empty = Fail; (<|>) = Alt
+instance Applicative (Par pos) where pure = Ret; (<*>) = ap
+instance Functor (Par pos) where fmap = liftM
+instance Monad (Par pos) where (>>=) = Bind
 
-data K4 a b = K4
+data Par pos a where
+  Position :: Par pos pos
+  Reject :: pos -> String -> Par pos a
+  Ret :: a -> Par pos a
+  Bind :: Par pos a -> (a -> Par pos b) -> Par pos b
+  Fail :: Par pos a
+  Satisfy :: (Char -> Bool) -> Par pos Char
+  NoError :: Par pos a -> Par pos a
+  Alt :: Par pos a -> Par pos a -> Par pos a
+
+data K4 pos a b = K4
   { eps :: a -> Res b
-  , succ :: Pos -> Text -> a -> Res b
+  , succ :: pos -> Text -> a -> Res b
   , fail :: Res b
-  , err :: Pos -> Msg -> Res b
+  , err :: pos -> Msg -> Res b
   }
 
 type Res a = Either String a
 
 data Msg = XMessage String
-
-prefixPos :: Pos -> Msg -> String
-prefixPos pos (XMessage msg) = do
-  let Pos{line,col} = pos
-  let andCol = False
-  let colS = if andCol then "." ++ show col else ""
-  printf "[line %d%s] %s" line colS msg
 
 defaultErrorMsg :: Text -> String
 defaultErrorMsg text =
@@ -63,38 +68,39 @@ defaultErrorMsg text =
         Nothing -> "EOF"
         Just (c,_) -> show c
 
-mkFinish :: Text -> K4 a a
-mkFinish text0 = do
+mkFinish :: forall pos a. Config pos a -> Text -> K4 pos a a
+mkFinish config@Config{initPos} text0 = do
   K4 { eps = mkYes initPos text0
      , succ = mkYes
      , fail = mkNo initPos (XMessage (defaultErrorMsg text0))
      , err = mkNo
      }
   where
-    mkNo :: Pos -> Msg -> Res a
-    mkNo pos msg = Left $ prefixPos pos msg
+    mkNo :: pos -> Msg -> Res a
+    mkNo pos msg = Left $ prefixPos config pos msg
 
-    mkYes :: Pos -> Text -> a -> Res a
+    mkYes :: pos -> Text -> a -> Res a
     mkYes pos text a = do
       if Text.null text then Right a else do
-        Left $ prefixPos pos (XMessage (defaultErrorMsg text))
+        Left $ prefixPos config pos (XMessage (defaultErrorMsg text))
 
-parse :: Par a -> Text -> Either String a
-parse parStart text0 =
-  run initPos text0 parStart (mkFinish text0)
+prefixPos :: Config pos a -> pos -> Msg -> String -- TODO: inline
+prefixPos Config{showPos} pos (XMessage msg) = printf "%s %s" (showPos pos) msg
+
+runParser :: forall pos x. Config pos x -> Text -> Either String x
+runParser config@Config{start,initPos,tickPos} text0 =
+  run initPos text0 start (mkFinish config text0)
   where
-    run :: Pos -> Text -> Par a -> K4 a b -> Res b
+    run :: pos -> Text -> Par pos a -> K4 pos a b -> Res b
     run p t par k@K4{eps,succ,fail,err} = case par of
 
       Position -> eps p
 
+      Reject pos message -> err pos (XMessage message)
+
       Ret x -> eps x
 
       Fail -> fail
-
-      Reject pos message -> do
-        let msg = XMessage message
-        err pos msg
 
       Satisfy pred -> do
         case Text.uncons t of
@@ -132,16 +138,3 @@ parse parStart text0 =
                       , fail
                       , err
                       }
-
-data Pos = Pos { line :: Int, col :: Int } deriving (Eq,Ord)
-
-instance Show Pos where
-  show Pos{line,col} = show line ++ "'" ++ show col
-
-initPos :: Pos
-initPos = Pos { line = 1, col = 0 }
-
-tickPos :: Pos -> Char -> Pos
-tickPos Pos {line,col} = \case
-  '\n' -> Pos { line = line + 1, col = 0 }
-  _ -> Pos { line, col = col + 1 }

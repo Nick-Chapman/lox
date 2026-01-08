@@ -3,12 +3,21 @@ module Parser (tryParse) where
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Data.Text (Text)
-import Par4 (parse,Par,lit,sat,alts,noError,position,reject)
+import Par4 (lit,sat,alts,noError,position,reject)
+import Par4 qualified (runParser,Par,Config(..))
+import Pos (Pos,initPos,tickPos,showPos)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isDigit)
 
+type Par a = Par4.Par Pos a
+
 tryParse :: Text -> Either String [Stat]
-tryParse = Par4.parse start
+tryParse = Par4.runParser Par4.Config
+  { start
+  , initPos
+  , tickPos
+  , showPos
+  }
 
 start :: Par [Stat]
 start = program where

@@ -3,7 +3,7 @@ module Value (Value(..),Env(..),isTruthy,vequal) where
 import Data.List (isSuffixOf)
 import Text.Printf (printf)
 import Runtime (Eff,Ref)
-import Par4 (Pos)
+import Pos (Pos)
 import Data.Map (Map)
 
 data Env = Env (Map String (Ref Value))

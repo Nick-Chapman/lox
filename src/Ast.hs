@@ -1,6 +1,6 @@
 module Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..)) where
 
-import Par4 (Pos)
+import Pos (Pos)
 
 data Stat
   = SExp Exp

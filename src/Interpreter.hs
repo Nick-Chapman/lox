@@ -2,7 +2,7 @@ module Interpreter (executeTopDecls) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Data.Map qualified as Map
-import Par4 (Pos(..))
+import Pos (Pos,initPos,showPos)
 import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef,Clock),Ref)
 import Text.Printf (printf)
 import Value (Value(..),Env(..),vequal,isTruthy)
@@ -13,7 +13,7 @@ emptyEnv = Env Map.empty
 executeTopDecls :: [Stat] -> Eff Env
 executeTopDecls decls = do
   r <- NewRef vClock
-  let globals = insertEnv emptyEnv (Identifier (Pos 0 0) "clock") r
+  let globals = insertEnv emptyEnv (Identifier initPos "clock") r
   executeDecls globals decls
 
 vClock :: Value
@@ -194,7 +194,5 @@ vadd pos = \case
   _ -> runtimeError pos "Operands must be two numbers or two strings."
 
 runtimeError :: Pos -> String -> Eff a
-runtimeError Pos{line,col} mes = do
-  let andCol = False
-  let colS = if andCol then "." ++ show col else ""
-  Error (printf "%s\n[line %d%s] in script" mes line colS)
+runtimeError pos mes =
+  Error (printf "%s\n%s in script" mes (showPos pos))
