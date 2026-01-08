@@ -3,13 +3,15 @@ module Parser (tryParse) where
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Data.Text (Text)
+import Data.Text qualified as Text (uncons)
 import Par4 (lit,sat,alts,noError,position,reject)
 import Par4 qualified (runParser,Par,Config(..))
 import Pos (Pos,initPos,tickPos,showPos)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isDigit)
 
-type Par a = Par4.Par Pos a
+type Token = Char
+type Par = Par4.Par Pos Token
 
 tryParse :: Text -> Either String [Stat]
 tryParse = Par4.runParser Par4.Config
@@ -17,7 +19,13 @@ tryParse = Par4.runParser Par4.Config
   , initPos
   , tickPos
   , showPos
+  , scanToken = Text.uncons
+  , unexpectedMessage
   }
+  where
+    unexpectedMessage :: Maybe Char -> String
+    unexpectedMessage =
+      printf "Error: Unexpected %s." . \case Just x -> show x; Nothing -> "EOF"
 
 start :: Par [Stat]
 start = program where
