@@ -3,7 +3,7 @@ module Parser (tryParse) where
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Data.Text (Text)
-import Par4 (parse,Par,char,lit,sat,alts,noError,skip,position,reject)
+import Par4 (parse,Par,lit,sat,alts,noError,position,reject)
 import Text.Printf (printf)
 import qualified Data.Char as Char (isAlpha,isDigit)
 
@@ -280,7 +280,7 @@ start = program where
   reject_next :: String -> Par a
   reject_next msg = do
     pos <- position
-    c <- char
+    c <- next
     reject pos (printf "Error at %s: %s" (show c) msg)
 
   sym s = nibble (noError (mapM_ lit s))
@@ -311,9 +311,12 @@ start = program where
     noError (do lit '/'; lit '/')
     skip notNL
 
+  skip p = do _ <- many p; return ()
+
   notNL = do
     _ <- sat (\case '\n' -> False; _ -> True)
     pure ()
 
   alpha = sat Char.isAlpha
   digit = sat Char.isDigit
+  next = sat (const True)

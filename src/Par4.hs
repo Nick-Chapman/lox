@@ -1,56 +1,26 @@
--- | 4-value Parser Combinators
-module Par4 (Par,parse,word,key,int,ws0,ws1,sp,nl,lit,sat,char,alts,opt,skip,separated,terminated,digit,dot,noError,Pos(..),position,reject) where
+module Par4 (parse,Par,lit,sat,alts,noError,reject,Pos(..),position) where
 
-import Control.Applicative (Alternative,empty,(<|>),many,some)
+import Control.Applicative (Alternative,empty,(<|>))
 import Control.Monad (ap,liftM)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Text.Printf (printf)
-import qualified Data.Char as Char
 
 instance Alternative Par where empty = Fail; (<|>) = Alt
 instance Applicative Par where pure = Ret; (<*>) = ap
 instance Functor Par where fmap = liftM
 instance Monad Par where (>>=) = Bind
 
-skip :: Par () -> Par ()
-separated :: Par () -> Par a -> Par [a]
-terminated :: Par () -> Par a -> Par [a]
-opt :: Par a -> Par (Maybe a)
 alts :: [Par a] -> Par a
-word :: Par String
-key :: String -> Par ()
-int :: Par Int
-ws1 :: Par ()
-ws0 :: Par ()
-digit :: Par Int
-sp :: Par ()
-nl :: Par ()
 lit :: Char -> Par ()
-dot :: Par Char
 sat :: (Char -> Bool) -> Par Char
-char :: Par Char
 noError :: Par a -> Par a
 position :: Par Pos
 reject :: Pos -> String -> Par a
 
-skip p = do _ <- many p; return ()
-separated sep p = do x <- p; alts [ pure [x], do sep; xs <- separated sep p; pure (x:xs) ]
-terminated term p = alts [ pure [], do x <- p; term; xs <- terminated term p; pure (x:xs) ]
-opt p = alts [ pure Nothing, fmap Just p ]
 alts = foldl Alt empty
-word = some $ sat Char.isAlpha
-key cs = NoError (mapM_ lit cs)
-int = foldl (\acc d -> 10*acc + d) 0 <$> some digit
-ws1 = do sp; ws0
-ws0 = do _ <- many sp; return ()
-digit = (\c -> Char.ord c - ord0) <$> sat Char.isDigit where ord0 = Char.ord '0'
-sp = lit ' '
-nl = lit '\n'
 lit x = do _ <- sat (== x); pure ()
-dot = sat (/= '\n')
 sat = Satisfy
-char = sat (const True)
 noError = NoError
 position = Position
 reject = Reject
