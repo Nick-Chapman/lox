@@ -72,6 +72,9 @@ execStat globals ret = execute where
       env <- pure $ insertEnv env fname r
       WriteRef r (close env fname formals body)
       k (insertEnv env fname r)
+    SClassDecl x@Identifier{name} -> \k -> do
+      r <- NewRef (VClass name)
+      k (insertEnv env x r)
 
 close :: Env -> Identifier -> [Identifier] -> Stat -> Value
 close env Identifier{name} formals body = VFunc (printf "<fn %s>" name) $ \globals pos args -> do
@@ -170,7 +173,13 @@ evalOp2 pos v1 v2 = \case
 asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
 asFunction func globals pos args = case func of
   VFunc _ f -> f globals pos args
-  _ -> runtimeError pos "Can only call functions and classes."
+  VClass name ->
+    case args of
+      _:_ -> error "no constructor args yet"
+      [] -> do
+        pure (VInstance name)
+  _ ->
+    runtimeError pos "Can only call functions and classes."
 
 checkArity :: Pos -> Int -> Int -> Eff ()
 checkArity pos nformals nargs =

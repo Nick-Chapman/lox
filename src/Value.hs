@@ -14,6 +14,8 @@ data Value
   | VNumber Double
   | VString String
   | VFunc String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
+  | VClass String
+  | VInstance String
 
 instance Show Value where
   show = \case
@@ -24,6 +26,8 @@ instance Show Value where
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
     VFunc name _  -> name
+    VClass name -> name
+    VInstance name -> name ++ " instance"
 
 isTruthy :: Value -> Bool
 isTruthy = \case
@@ -32,6 +36,8 @@ isTruthy = \case
   VString{} -> True
   VNumber{} -> True
   VFunc{} -> True
+  VClass{} -> True
+  VInstance{} -> True
 
 vequal :: Value -> Value -> Bool
 vequal v1 v2 = case (v1,v2) of

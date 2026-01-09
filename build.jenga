@@ -10,7 +10,7 @@ chapters:
   echo chap9.list  >> $out  # +27 =  96
   echo chap10.list >> $out  # +43 = 139
   echo chap11.list >> $out  #  +8 = 147
-  #echo chap12.list >> $out  # +60 = 207
+  echo chap12.list >> $out  # +60 = 207
   #echo chap13.list >> $out  # +32 = 239
 
 fullpath.list: @chapters

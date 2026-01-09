@@ -53,7 +53,14 @@ start = program where
     whitespace
     many decl
 
-  decl = alts [funDecl, varDecl, stat]
+  decl = alts [classDecl, funDecl, varDecl, stat]
+
+  classDecl = do
+    key "class"
+    x <- varName "class name"
+    sym "{"
+    sym "}"
+    pure (SClassDecl x)
 
   varDecl = do
     key "var"

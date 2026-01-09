@@ -12,6 +12,7 @@ data Stat
   | SReturn Pos Exp
   | SVarDecl Identifier Exp
   | SFunDecl Identifier [Identifier] Stat
+  | SClassDecl Identifier
 
 data Exp
   = ELit Lit
