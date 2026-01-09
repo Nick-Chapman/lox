@@ -15,7 +15,7 @@ data Value
   | VString String
   | VFunc String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
   | VClass String
-  | VInstance String
+  | VInstance String (Ref (Map String Value))
 
 instance Show Value where
   show = \case
@@ -27,7 +27,7 @@ instance Show Value where
     VString s -> s
     VFunc name _  -> name
     VClass name -> name
-    VInstance name -> name ++ " instance"
+    VInstance name _ -> name ++ " instance"
 
 isTruthy :: Value -> Bool
 isTruthy = \case

@@ -24,6 +24,8 @@ data Exp
   | ELogicalAnd Exp Exp
   | ELogicalOr Exp Exp
   | ECall Pos Exp [Exp]
+  | EGetProp Pos Exp Identifier
+  | ESetProp Pos Exp Identifier Exp
 
 data Lit
   = LNil

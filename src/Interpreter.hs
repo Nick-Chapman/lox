@@ -123,6 +123,27 @@ evaluate globals env = eval where
       vargs <- mapM eval args
       asFunction vfunc globals pos vargs
 
+    EGetProp pos e Identifier{name} -> do
+      eval e >>= \case
+        VInstance _ r -> do
+          m <- ReadRef r
+          case Map.lookup name m of
+            Nothing -> runtimeError pos (printf "Undefined property '%s'." name)
+            Just v -> pure v
+        _ ->
+          runtimeError pos "Only instances have properties."
+
+    ESetProp pos e1 Identifier{name} e2 -> do
+      v1 <- eval e1
+      v2 <- eval e2
+      case v1 of
+        VInstance _ r -> do
+          m <- ReadRef r
+          WriteRef r (Map.insert name v2 m)
+          pure v2
+        _ ->
+          runtimeError pos "Only instances have fields."
+
   lookup :: Identifier -> Eff (Ref Value)
   lookup x =
     case lookupEnv env x of
@@ -177,7 +198,8 @@ asFunction func globals pos args = case func of
     case args of
       _:_ -> error "no constructor args yet"
       [] -> do
-        pure (VInstance name)
+        r <- NewRef Map.empty
+        pure (VInstance name r)
   _ ->
     runtimeError pos "Can only call functions and classes."
 

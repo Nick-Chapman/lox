@@ -152,6 +152,9 @@ start = program where
                 EVar x1 -> do
                   e2 <- assign
                   pure (EAssign x1 e2)
+                EGetProp pos e1 x -> do
+                  e2 <- assign
+                  pure (ESetProp pos e1 x e2)
                 _ -> reject " at '=': Invalid assignment target."
          , pure e1
          ]
@@ -209,6 +212,11 @@ start = program where
         alts [ do pos <- position
                   xs <- arguments
                   loop (ECall pos e1 xs)
+             , do
+                 pos <- position
+                 sym "."
+                 x <- varName "field"
+                 loop (EGetProp pos e1 x)
              , pure e1
              ]
 
