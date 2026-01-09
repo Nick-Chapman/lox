@@ -1,6 +1,6 @@
 module Parser (tryParse) where
 
-import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Ast (Stat(..),Func(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Applicative (many,some)
 import Data.Text (Text)
 import Data.Text qualified as Text (uncons)
@@ -59,8 +59,9 @@ start = program where
     key "class"
     x <- varName "class name"
     sym "{"
+    ms <- many funDef
     sym "}"
-    pure (SClassDecl x)
+    pure (SClassDecl x ms)
 
   varDecl = do
     key "var"
@@ -74,10 +75,14 @@ start = program where
 
   funDecl = do
     key "fun"
+    fun <- funDef
+    pure (SFunDecl fun)
+
+  funDef = do
     name <- varName "fun-name"
     xs <- parameters
     body <- blockStat
-    pure (SFunDecl name xs body)
+    pure Func{ name, formals = xs, body }
 
   stat =
     alts [returnStat, forStat, whileStat, ifStat, printStat, blockStat, expressionStat]

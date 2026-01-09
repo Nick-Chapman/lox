@@ -1,4 +1,4 @@
-module Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..)) where
+module Ast (Stat(..),Func(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..)) where
 
 import Pos (Pos)
 
@@ -11,8 +11,14 @@ data Stat
   | SFor (Stat,Exp,Stat) Stat
   | SReturn Pos Exp
   | SVarDecl Identifier Exp
-  | SFunDecl Identifier [Identifier] Stat
-  | SClassDecl Identifier
+  | SFunDecl Func
+  | SClassDecl Identifier [Func]
+
+data Func = Func
+  { name :: Identifier
+  , formals :: [Identifier]
+  , body :: Stat
+  }
 
 data Exp
   = ELit Lit

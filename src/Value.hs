@@ -14,7 +14,7 @@ data Value
   | VNumber Double
   | VString String
   | VFunc String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
-  | VClass String
+  | VClass String (Map String Value)
   | VInstance String (Ref (Map String Value))
 
 instance Show Value where
@@ -26,7 +26,7 @@ instance Show Value where
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
     VFunc name _  -> name
-    VClass name -> name
+    VClass name _ -> name
     VInstance name _ -> name ++ " instance"
 
 isTruthy :: Value -> Bool

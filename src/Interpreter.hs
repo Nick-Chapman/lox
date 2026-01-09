@@ -1,6 +1,6 @@
 module Interpreter (executeTopDecls) where
 
-import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Ast (Stat(..),Exp(..),Func(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Data.Map qualified as Map
 import Pos (Pos,initPos,showPos)
 import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef,Clock),Ref)
@@ -67,17 +67,18 @@ execStat globals ret = execute where
     SVarDecl id e -> \k -> do
       r <- evaluate globals env e >>= NewRef
       k (insertEnv env id r)
-    SFunDecl fname formals body -> \k -> do
+    SFunDecl function@Func{name=fname} -> \k -> do
       r <- NewRef VNil
       env <- pure $ insertEnv env fname r
-      WriteRef r (close env fname formals body)
+      WriteRef r (close env function)
       k (insertEnv env fname r)
-    SClassDecl x@Identifier{name} -> \k -> do
-      r <- NewRef (VClass name)
+    SClassDecl x@Identifier{name} methods -> \k -> do
+      let mm = Map.fromList [ (name,close env func) | func@Func{name=Identifier{name}} <- methods ]
+      r <- NewRef (VClass name mm)
       k (insertEnv env x r)
 
-close :: Env -> Identifier -> [Identifier] -> Stat -> Value
-close env Identifier{name} formals body = VFunc (printf "<fn %s>" name) $ \globals pos args -> do
+close :: Env -> Func -> Value
+close env Func{name=Identifier{name},formals,body} = VFunc (printf "<fn %s>" name) $ \globals pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
   let ret = Just (\v -> pure v)
@@ -194,11 +195,11 @@ evalOp2 pos v1 v2 = \case
 asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
 asFunction func globals pos args = case func of
   VFunc _ f -> f globals pos args
-  VClass name ->
+  VClass name mm ->
     case args of
       _:_ -> error "no constructor args yet"
       [] -> do
-        r <- NewRef Map.empty
+        r <- NewRef mm
         pure (VInstance name r)
   _ ->
     runtimeError pos "Can only call functions and classes."
