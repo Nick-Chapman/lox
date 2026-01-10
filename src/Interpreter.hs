@@ -75,17 +75,20 @@ execStat globals ret = execute where
     SClassDecl x@Identifier{name} methods -> \k -> do
       let
         makeInstance :: Env -> Pos -> [Value] -> Eff Value
-        makeInstance _globals _pos args = do
-          case args of
-            _:_ -> error "no constructor args yet"
-            [] -> do
-              r <- NewRef Map.empty
-              let this = VInstance name r
-              _rthis <- NewRef this
-              env <- pure $ insertEnv env Identifier{name="this",pos=_pos} _rthis
-              let mm = Map.fromList [ (name,close env func)
-                                    | func@Func{name=Identifier{name}} <- methods ]
-              WriteRef r mm
+        makeInstance globals pos args = do
+          r <- NewRef Map.empty
+          let this = VInstance name r
+          rthis <- NewRef this
+          env <- pure $ insertEnv env Identifier{name="this",pos} rthis
+          let mm = Map.fromList [ (name,close env func)
+                                | func@Func{name=Identifier{name}} <- methods ]
+          WriteRef r mm
+          case Map.lookup "init" mm of
+            Nothing -> do
+              checkArity pos 0 (length args)
+              pure this
+            Just init -> do
+              _ignoredInitRV <- asFunction init globals pos args
               pure this
 
       r <- NewRef (VFunc name makeInstance)
