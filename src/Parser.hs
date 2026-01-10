@@ -254,6 +254,7 @@ start = program where
   primary :: Par Exp
   primary = alts
     [ ELit <$> literal
+    , do pos <- position; key "this"; pure (EThis pos)
     , EVar <$> varName "expression"
     , EGrouping <$> bracketed expression
     ]

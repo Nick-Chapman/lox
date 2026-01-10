@@ -32,6 +32,7 @@ data Exp
   | ECall Pos Exp [Exp]
   | EGetProp Pos Exp Identifier
   | ESetProp Pos Exp Identifier Exp
+  | EThis Pos
 
 data Lit
   = LNil

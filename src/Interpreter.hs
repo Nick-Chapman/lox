@@ -73,8 +73,22 @@ execStat globals ret = execute where
       WriteRef r (close env function)
       k (insertEnv env fname r)
     SClassDecl x@Identifier{name} methods -> \k -> do
-      let mm = Map.fromList [ (name,close env func) | func@Func{name=Identifier{name}} <- methods ]
-      r <- NewRef (VClass name mm)
+      let
+        makeInstance :: Env -> Pos -> [Value] -> Eff Value
+        makeInstance _globals _pos args = do
+          case args of
+            _:_ -> error "no constructor args yet"
+            [] -> do
+              r <- NewRef Map.empty
+              let this = VInstance name r
+              _rthis <- NewRef this
+              env <- pure $ insertEnv env Identifier{name="this",pos=_pos} _rthis
+              let mm = Map.fromList [ (name,close env func)
+                                    | func@Func{name=Identifier{name}} <- methods ]
+              WriteRef r mm
+              pure this
+
+      r <- NewRef (VFunc name makeInstance)
       k (insertEnv env x r)
 
 close :: Env -> Func -> Value
@@ -96,6 +110,8 @@ evaluate :: Env -> Env -> Exp -> Eff Value
 evaluate globals env = eval where
 
   eval = \case
+    --EThis pos -> runtimeError pos "TODO: this"
+    EThis pos -> do r <- lookup (Identifier {name="this",pos}); ReadRef r
     ELit x -> pure (evalLit x)
     EGrouping e -> eval e
     EBinary pos e1 op e2 -> do
@@ -195,12 +211,6 @@ evalOp2 pos v1 v2 = \case
 asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
 asFunction func globals pos args = case func of
   VFunc _ f -> f globals pos args
-  VClass name mm ->
-    case args of
-      _:_ -> error "no constructor args yet"
-      [] -> do
-        r <- NewRef mm
-        pure (VInstance name r)
   _ ->
     runtimeError pos "Can only call functions and classes."
 
