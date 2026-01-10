@@ -1,0 +1,72 @@
+
+// Environment...
+
+class Extend {
+  init(k,v,e) { this.k = k; this.v = v; this.e = e; }
+  lookup(x) {
+    if (x == this.k) return this.v;
+    return this.e.lookup(x);
+  }
+}
+class Empty {
+  lookup(x) {
+    print("Empty.lookup: '" + x + "'");
+    this.crash();
+  }
+}
+
+
+// Expression forms...
+
+class Let {
+  init(x,e1,e2) { this.x = x; this.e1 = e1; this.e2 = e2; }
+  eval(env) {
+    var envx = Extend(this.x,this.e1.eval(env),env);
+    return this.e2.eval(envx);
+  }
+}
+class Sub {
+  init(a,b) { this.a = a; this.b = b; }
+  eval(env) {
+    return this.a.eval(env) - this.b.eval(env);
+  }
+}
+class Num {
+  init(i) { this.i = i; }
+  eval(env) {
+    return (this.i);
+  }
+}
+class Var {
+  init(x) { this.x = x; }
+  eval(env) {
+    return env.lookup(this.x);
+  }
+}
+class App  {
+  init(a,b) { this.a = a; this.b = b; }
+  eval(env) {
+    return this.a.eval(env)(this.b.eval(env));
+  }
+}
+class Lam  {
+  init(x,body) { this.x = x; this.body = body; }
+  eval(env) {
+    fun f(v2) {
+      return this.body.eval(Extend(this.x,v2,env));
+    }
+    return f;
+  }
+}
+
+// Example program...
+var thrice =
+  Lam("f",Lam("x",
+    App(Var("f"),App(Var("f"),App(Var("f"),Var("x"))))));
+
+var dec = Lam("x",Sub(Var("x"),Num(1)));
+
+var prog = App(App(App(thrice,thrice),dec),Num(0));
+
+print "thrice thrice (\x -> x - 1) 100";
+print prog.eval(Empty());
