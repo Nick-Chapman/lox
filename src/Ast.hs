@@ -26,13 +26,13 @@ data Exp
   | EBinary Pos Exp Op2 Exp
   | EUnary Pos Op1 Exp
   | EVar Pos Identifier
+  | EThis Pos
   | EAssign Pos Identifier Exp
   | ELogicalAnd Exp Exp
   | ELogicalOr Exp Exp
   | ECall Pos Exp [Exp]
   | EGetProp Pos Exp Identifier
   | ESetProp Pos Exp Identifier Exp
-  | EThis Pos
 
 data Lit
   = LNil
@@ -44,4 +44,4 @@ data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
 
-data Identifier = Identifier { name :: String }
+data Identifier = Identifier { idString :: String } deriving (Eq,Ord,Show)

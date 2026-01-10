@@ -5,8 +5,9 @@ import Text.Printf (printf)
 import Runtime (Eff,Ref)
 import Pos (Pos)
 import Data.Map (Map)
+import Ast (Identifier(..))
 
-data Env = Env (Map String (Ref Value))
+data Env = Env (Map Identifier (Ref Value))
 
 data Value
   = VNil
@@ -14,7 +15,7 @@ data Value
   | VNumber Double
   | VString String
   | VFunc String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
-  | VInstance String (Ref (Map String Value))
+  | VInstance Identifier (Ref (Map Identifier Value))
 
 instance Show Value where
   show = \case
@@ -25,7 +26,7 @@ instance Show Value where
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
     VFunc name _  -> name
-    VInstance name _ -> name ++ " instance"
+    VInstance Identifier{idString} _ -> idString ++ " instance"
 
 isTruthy :: Value -> Bool
 isTruthy = \case

@@ -262,7 +262,7 @@ start = program where
   varName :: String -> Par Identifier
   varName expect = nibble $ do
     name <- identifier
-    if name `notElem` keywords then pure (Identifier { name }) else do
+    if name `notElem` keywords then pure (Identifier name) else do
       let message = printf " at '%s': Expect %s." name expect
       reject message
 

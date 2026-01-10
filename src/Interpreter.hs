@@ -1,6 +1,6 @@
 module Interpreter (executeTopDecls) where
 
-import Ast (Stat(..),Exp(..),Func(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Ast (Stat(..),Exp(..),Func(..),Op1(..),Op2(..),Lit(..),Identifier(Identifier,idString))
 import Data.Map qualified as Map
 import Pos (Pos,showPos)
 import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef,Clock),Ref)
@@ -67,26 +67,26 @@ execStat globals ret = execute where
     SVarDecl id e -> \k -> do
       r <- evaluate globals env e >>= NewRef
       k (insertEnv env id r)
-    SFunDecl function@Func{name=fname} -> \k -> do
-      r <- NewRef VNil
-      env <- pure $ insertEnv env fname r
+    SFunDecl function@Func{name} -> \k -> do
+      r <- NewRef (error "unreachable")
+      env <- pure $ insertEnv env name r
       WriteRef r (close env function)
-      k (insertEnv env fname r)
-    SClassDecl className@Identifier{name} methods -> \k -> do
+      k (insertEnv env name r)
+    SClassDecl className methods -> \k -> do
       classR <- NewRef (error "unreachable")
       let
         makeInstance :: Env -> Pos -> [Value] -> Eff Value
         makeInstance globals pos args = do
-          r <- NewRef Map.empty
-          let this = VInstance name r
+          r <- NewRef (error "unreachable")
+          let this = VInstance className r
           thisR <- NewRef this
           env <- pure $ insertEnv env className classR
-          env <- pure $ insertEnv env Identifier{name="this"} thisR
+          env <- pure $ insertEnv env (Identifier "this") thisR
           let mm = Map.fromList [ (name,close env func)
-                                | func@Func{name=Identifier{name}} <- methods
+                                | func@Func{name} <- methods
                                 ]
           WriteRef r mm
-          case Map.lookup "init" mm of
+          case Map.lookup (Identifier "init") mm of
             Nothing -> do
               checkArity pos 0 (length args)
               pure this
@@ -94,11 +94,11 @@ execStat globals ret = execute where
               _ignoredInitRV <- asFunction init globals pos args
               pure this
 
-      WriteRef classR (VFunc name makeInstance)
+      WriteRef classR (VFunc (idString className) makeInstance)
       k (insertEnv env className classR)
 
 close :: Env -> Func -> Value
-close env Func{name=Identifier{name},formals,body} = VFunc (printf "<fn %s>" name) $ \globals pos args -> do
+close env Func{name,formals,body} = VFunc (printf "<fn %s>" $ idString name) $ \globals pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
   let ret = Just (\v -> pure v)
@@ -116,8 +116,6 @@ evaluate :: Env -> Env -> Exp -> Eff Value
 evaluate globals env = eval where
 
   eval = \case
-    --EThis pos -> runtimeError pos "TODO: this"
-    EThis pos -> do r <- lookup pos (Identifier {name="this"}); ReadRef r
     ELit x -> pure (evalLit x)
     EGrouping e -> eval e
     EBinary pos e1 op e2 -> do
@@ -129,6 +127,9 @@ evaluate globals env = eval where
       evalOp1 pos op v
     EVar pos x -> do
       r <- lookup pos x
+      ReadRef r
+    EThis pos -> do
+      r <- lookup pos (Identifier "this")
       ReadRef r
     EAssign pos x e -> do
       r <- lookup pos x
@@ -146,23 +147,23 @@ evaluate globals env = eval where
       vargs <- mapM eval args
       asFunction vfunc globals pos vargs
 
-    EGetProp pos e Identifier{name} -> do
+    EGetProp pos e x -> do
       eval e >>= \case
         VInstance _ r -> do
           m <- ReadRef r
-          case Map.lookup name m of
-            Nothing -> runtimeError pos (printf "Undefined property '%s'." name)
+          case Map.lookup x m of
+            Nothing -> runtimeError pos (printf "Undefined property '%s'." $ idString x)
             Just v -> pure v
         _ ->
           runtimeError pos "Only instances have properties."
 
-    ESetProp pos e1 Identifier{name} e2 -> do
+    ESetProp pos e1 x e2 -> do
       v1 <- eval e1
       v2 <- eval e2
       case v1 of
         VInstance _ r -> do
           m <- ReadRef r
-          WriteRef r (Map.insert name v2 m)
+          WriteRef r (Map.insert x v2 m)
           pure v2
         _ ->
           runtimeError pos "Only instances have fields."
@@ -175,14 +176,13 @@ evaluate globals env = eval where
         case lookupEnv globals x of
           Just r -> pure r
           Nothing -> do
-            let Identifier{name} = x
-            runtimeError pos (printf "Undefined variable '%s'." name)
+            runtimeError pos (printf "Undefined variable '%s'." $ idString x)
 
 insertEnv :: Env -> Identifier -> Ref Value -> Env
-insertEnv (Env m) Identifier{name} r = Env (Map.insert name r m)
+insertEnv (Env m) x r = Env (Map.insert x r m)
 
 lookupEnv :: Env -> Identifier -> Maybe (Ref Value)
-lookupEnv (Env m) Identifier{name} = Map.lookup name m
+lookupEnv (Env m) x = Map.lookup x m
 
 evalLit :: Lit -> Value
 evalLit = \case
