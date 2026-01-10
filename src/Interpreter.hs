@@ -2,7 +2,7 @@ module Interpreter (executeTopDecls) where
 
 import Ast (Stat(..),Exp(..),Func(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Data.Map qualified as Map
-import Pos (Pos,initPos,showPos)
+import Pos (Pos,showPos)
 import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef,Clock),Ref)
 import Text.Printf (printf)
 import Value (Value(..),Env(..),vequal,isTruthy)
@@ -13,7 +13,7 @@ emptyEnv = Env Map.empty
 executeTopDecls :: [Stat] -> Eff Env
 executeTopDecls decls = do
   r <- NewRef vClock
-  let globals = insertEnv emptyEnv (Identifier initPos "clock") r
+  let globals = insertEnv emptyEnv (Identifier "clock") r
   executeDecls globals decls
 
 vClock :: Value
@@ -81,7 +81,7 @@ execStat globals ret = execute where
           let this = VInstance name r
           thisR <- NewRef this
           env <- pure $ insertEnv env className classR
-          env <- pure $ insertEnv env Identifier{name="this",pos} thisR
+          env <- pure $ insertEnv env Identifier{name="this"} thisR
           let mm = Map.fromList [ (name,close env func)
                                 | func@Func{name=Identifier{name}} <- methods
                                 ]
@@ -117,7 +117,7 @@ evaluate globals env = eval where
 
   eval = \case
     --EThis pos -> runtimeError pos "TODO: this"
-    EThis pos -> do r <- lookup (Identifier {name="this",pos}); ReadRef r
+    EThis pos -> do r <- lookup pos (Identifier {name="this"}); ReadRef r
     ELit x -> pure (evalLit x)
     EGrouping e -> eval e
     EBinary pos e1 op e2 -> do
@@ -127,11 +127,11 @@ evaluate globals env = eval where
     EUnary pos op e -> do
       v <- eval e
       evalOp1 pos op v
-    EVar x -> do
-      r <- lookup x
+    EVar pos x -> do
+      r <- lookup pos x
       ReadRef r
-    EAssign x e -> do
-      r <- lookup x
+    EAssign pos x e -> do
+      r <- lookup pos x
       v <- eval e
       WriteRef r v
       pure v
@@ -167,15 +167,15 @@ evaluate globals env = eval where
         _ ->
           runtimeError pos "Only instances have fields."
 
-  lookup :: Identifier -> Eff (Ref Value)
-  lookup x =
+  lookup :: Pos -> Identifier -> Eff (Ref Value)
+  lookup pos x =
     case lookupEnv env x of
       Just r -> pure r
       Nothing -> do
         case lookupEnv globals x of
           Just r -> pure r
           Nothing -> do
-            let Identifier{pos,name} = x
+            let Identifier{name} = x
             runtimeError pos (printf "Undefined variable '%s'." name)
 
 insertEnv :: Env -> Identifier -> Ref Value -> Env

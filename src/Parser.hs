@@ -154,9 +154,9 @@ start = program where
     e1 <- logicalOr
     alts [ do sym "="
               case e1 of
-                EVar x1 -> do
+                EVar pos x1 -> do
                   e2 <- assign
-                  pure (EAssign x1 e2)
+                  pure (EAssign pos x1 e2)
                 EGetProp pos e1 x -> do
                   e2 <- assign
                   pure (ESetProp pos e1 x e2)
@@ -255,15 +255,14 @@ start = program where
   primary = alts
     [ ELit <$> literal
     , do pos <- position; key "this"; pure (EThis pos)
-    , EVar <$> varName "expression"
+    , do pos <- position; EVar pos <$> varName "expression"
     , EGrouping <$> bracketed expression
     ]
 
   varName :: String -> Par Identifier
   varName expect = nibble $ do
-    pos <- position
     name <- identifier
-    if name `notElem` keywords then pure (Identifier { pos, name }) else do
+    if name `notElem` keywords then pure (Identifier { name }) else do
       let message = printf " at '%s': Expect %s." name expect
       reject message
 

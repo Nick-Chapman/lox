@@ -25,8 +25,8 @@ data Exp
   | EGrouping Exp
   | EBinary Pos Exp Op2 Exp
   | EUnary Pos Op1 Exp
-  | EVar Identifier
-  | EAssign Identifier Exp
+  | EVar Pos Identifier
+  | EAssign Pos Identifier Exp
   | ELogicalAnd Exp Exp
   | ELogicalOr Exp Exp
   | ECall Pos Exp [Exp]
@@ -44,4 +44,4 @@ data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
 
-data Identifier = Identifier { pos :: Pos, name :: String }
+data Identifier = Identifier { name :: String }
