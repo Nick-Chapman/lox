@@ -72,16 +72,19 @@ execStat globals ret = execute where
       env <- pure $ insertEnv env fname r
       WriteRef r (close env function)
       k (insertEnv env fname r)
-    SClassDecl x@Identifier{name} methods -> \k -> do
+    SClassDecl className@Identifier{name} methods -> \k -> do
+      classR <- NewRef (error "unreachable")
       let
         makeInstance :: Env -> Pos -> [Value] -> Eff Value
         makeInstance globals pos args = do
           r <- NewRef Map.empty
           let this = VInstance name r
-          rthis <- NewRef this
-          env <- pure $ insertEnv env Identifier{name="this",pos} rthis
+          thisR <- NewRef this
+          env <- pure $ insertEnv env className classR
+          env <- pure $ insertEnv env Identifier{name="this",pos} thisR
           let mm = Map.fromList [ (name,close env func)
-                                | func@Func{name=Identifier{name}} <- methods ]
+                                | func@Func{name=Identifier{name}} <- methods
+                                ]
           WriteRef r mm
           case Map.lookup "init" mm of
             Nothing -> do
@@ -91,8 +94,8 @@ execStat globals ret = execute where
               _ignoredInitRV <- asFunction init globals pos args
               pure this
 
-      r <- NewRef (VFunc name makeInstance)
-      k (insertEnv env x r)
+      WriteRef classR (VFunc name makeInstance)
+      k (insertEnv env className classR)
 
 close :: Env -> Func -> Value
 close env Func{name=Identifier{name},formals,body} = VFunc (printf "<fn %s>" name) $ \globals pos args -> do

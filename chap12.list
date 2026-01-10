@@ -1,7 +1,7 @@
 test/assignment/to_this.lox
 test/call/object.lox
 test/class/empty.lox
-#test/class/local_reference_self.lox
+test/class/local_reference_self.lox
 test/class/reference_self.lox
 test/closure/close_over_method_parameter.lox
 test/constructor/arguments.lox
