@@ -70,7 +70,7 @@ execStat globals ret = execute where
     SFunDecl function@Func{name} -> \k -> do
       r <- NewRef (error "unreachable")
       env <- pure $ insertEnv env name r
-      WriteRef r (close env function)
+      WriteRef r (close pure env function)
       k (insertEnv env name r)
     SClassDecl className methods -> \k -> do
       classR <- NewRef (error "unreachable")
@@ -82,11 +82,14 @@ execStat globals ret = execute where
           thisR <- NewRef this
           env <- pure $ insertEnv env className classR
           env <- pure $ insertEnv env (Identifier "this") thisR
-          let mm = Map.fromList [ (name,close env func)
+          let init = Identifier "init"
+          let retme _ = pure this
+          let mm = Map.fromList [ (name,close ret env func)
                                 | func@Func{name} <- methods
+                                , let ret = if name==init then retme else pure
                                 ]
           WriteRef r mm
-          case Map.lookup (Identifier "init") mm of
+          case Map.lookup init mm of
             Nothing -> do
               checkArity pos 0 (length args)
               pure this
@@ -97,13 +100,12 @@ execStat globals ret = execute where
       WriteRef classR (VFunc (idString className) makeInstance)
       k (insertEnv env className classR)
 
-close :: Env -> Func -> Value
-close env Func{name,formals,body} = VFunc (printf "<fn %s>" $ idString name) $ \globals pos args -> do
+close :: (Value -> Eff Value) -> Env -> Func -> Value
+close ret env Func{name,formals,body} = VFunc (printf "<fn %s>" $ idString name) $ \globals pos args -> do
   checkArity pos (length formals) (length args)
   env <- bindArgs env (zip formals args)
-  let ret = Just (\v -> pure v)
-  let k _ = pure VNil
-  execStat globals ret env body k
+  let k _ = ret VNil
+  execStat globals (Just ret) env body k
 
 bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
 bindArgs env = \case

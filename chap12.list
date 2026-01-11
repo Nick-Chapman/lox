@@ -5,8 +5,8 @@ test/class/local_reference_self.lox
 test/class/reference_self.lox
 test/closure/close_over_method_parameter.lox
 test/constructor/arguments.lox
-#test/constructor/call_init_early_return.lox
-#test/constructor/call_init_explicitly.lox
+test/constructor/call_init_early_return.lox
+test/constructor/call_init_explicitly.lox
 test/constructor/default_arguments.lox
 test/constructor/default.lox
 test/constructor/early_return.lox
