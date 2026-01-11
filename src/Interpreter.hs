@@ -12,14 +12,17 @@ emptyEnv = Env Map.empty
 
 executeTopDecls :: [Stat] -> Eff Env
 executeTopDecls decls = do
+  vClock <- makeNativeClock
   r <- NewRef vClock
   let globals = insertEnv emptyEnv (Identifier "clock") r
   executeDecls globals decls
 
-vClock :: Value
-vClock = VFunc "<native fn>" $  \_globals pos args -> do
-  checkArity pos 0 (length args)
-  VNumber <$> Clock
+makeNativeClock :: Eff Value
+makeNativeClock = do
+  identity <- NewRef ()
+  pure $ VFunc identity "<native fn>" $  \_globals pos args -> do
+    checkArity pos 0 (length args)
+    VNumber <$> Clock
 
 executeDecls :: Env -> [Stat] -> Eff Env
 executeDecls globals = \case
@@ -70,7 +73,8 @@ execStat globals ret = execute where
     SFunDecl function@Func{name} -> \k -> do
       r <- NewRef (error "unreachable")
       env <- pure $ insertEnv env name r
-      WriteRef r (close pure env function)
+      closure <- close pure env function
+      WriteRef r closure
       k (insertEnv env name r)
     SClassDecl className methods -> \k -> do
       classR <- NewRef (error "unreachable")
@@ -84,10 +88,13 @@ execStat globals ret = execute where
           env <- pure $ insertEnv env (Identifier "this") thisR
           let init = Identifier "init"
           let retme _ = pure this
-          let mm = Map.fromList [ (name,close ret env func)
-                                | func@Func{name} <- methods
-                                , let ret = if name==init then retme else pure
-                                ]
+          binds <- sequence
+                [ do closure <- close ret env func
+                     pure (name,closure)
+                | func@Func{name} <- methods
+                , let ret = if name==init then retme else pure
+                ]
+          let mm = Map.fromList binds
           WriteRef r mm
           case Map.lookup init mm of
             Nothing -> do
@@ -97,15 +104,19 @@ execStat globals ret = execute where
               _ignoredInitRV <- asFunction init globals pos args
               pure this
 
-      WriteRef classR (VFunc (idString className) makeInstance)
+      classIdentity <- NewRef ()
+      WriteRef classR (VFunc classIdentity (idString className) makeInstance)
       k (insertEnv env className classR)
 
-close :: (Value -> Eff Value) -> Env -> Func -> Value
-close ret env Func{name,formals,body} = VFunc (printf "<fn %s>" $ idString name) $ \globals pos args -> do
-  checkArity pos (length formals) (length args)
-  env <- bindArgs env (zip formals args)
-  let k _ = ret VNil
-  execStat globals (Just ret) env body k
+close :: (Value -> Eff Value) -> Env -> Func -> Eff Value
+close ret env Func{name,formals,body} = do
+  identity <- NewRef ()
+  let printName = printf "<fn %s>" $ idString name
+  pure $ VFunc identity printName $ \globals pos args -> do
+    checkArity pos (length formals) (length args)
+    env <- bindArgs env (zip formals args)
+    let k _ = ret VNil
+    execStat globals (Just ret) env body k
 
 bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
 bindArgs env = \case
@@ -218,7 +229,7 @@ evalOp2 pos v1 v2 = \case
 
 asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
 asFunction func globals pos args = case func of
-  VFunc _ f -> f globals pos args
+  VFunc _ _ f -> f globals pos args
   _ ->
     runtimeError pos "Can only call functions and classes."
 

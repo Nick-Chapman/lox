@@ -14,7 +14,7 @@ data Value
   | VBool Bool
   | VNumber Double
   | VString String
-  | VFunc String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
+  | VFunc (Ref ()) String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
   | VInstance Identifier (Ref (Map Identifier Value))
 
 instance Show Value where
@@ -25,7 +25,7 @@ instance Show Value where
       let s = printf "%f" n
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
-    VFunc name _  -> name
+    VFunc _ name _  -> name
     VInstance Identifier{idString} _ -> idString ++ " instance"
 
 isTruthy :: Value -> Bool
@@ -43,4 +43,5 @@ vequal v1 v2 = case (v1,v2) of
   (VBool b1, VBool b2) -> b1 == b2
   (VNumber n1, VNumber n2) -> n1 == n2
   (VString s1, VString s2) -> s1 == s2
+  (VFunc r1 _ _, VFunc r2 _ _) -> (r1 == r2)
   _ -> False
