@@ -73,7 +73,8 @@ execStat globals ret = execute where
     SFunDecl function@Func{name} -> \k -> do
       r <- NewRef (error "unreachable")
       env <- pure $ insertEnv env name r
-      closure <- close pure env function
+      identity <- NewRef ()
+      let closure = close identity pure env function
       WriteRef r closure
       k (insertEnv env name r)
     SClassDecl className methods -> \k -> do
@@ -88,9 +89,9 @@ execStat globals ret = execute where
           env <- pure $ insertEnv env (Identifier "this") thisR
           let init = Identifier "init"
           let retme _ = pure this
-          binds <- sequence
-                [ do closure <- close ret env func
-                     pure (name,closure)
+          let binds =
+                [ let closure = VMethod (\identity -> close identity ret env func) in
+                  (name,closure)
                 | func@Func{name} <- methods
                 , let ret = if name==init then retme else pure
                 ]
@@ -100,19 +101,24 @@ execStat globals ret = execute where
             Nothing -> do
               checkArity pos 0 (length args)
               pure this
-            Just init -> do
-              _ignoredInitRV <- asFunction init globals pos args
+            Just v -> do
+              initM <- do
+                case v of
+                  VMethod m -> do
+                    identity <- NewRef ()
+                    pure (m identity)
+                  v -> pure v
+              _ignoredInitRV <- asFunction initM globals pos args
               pure this
 
       classIdentity <- NewRef ()
       WriteRef classR (VFunc classIdentity (idString className) makeInstance)
       k (insertEnv env className classR)
 
-close :: (Value -> Eff Value) -> Env -> Func -> Eff Value
-close ret env Func{name,formals,body} = do
-  identity <- NewRef ()
+close :: Ref () -> (Value -> Eff Value) -> Env -> Func -> Value
+close identity ret env Func{name,formals,body} = do
   let printName = printf "<fn %s>" $ idString name
-  pure $ VFunc identity printName $ \globals pos args -> do
+  VFunc identity printName $ \globals pos args -> do
     checkArity pos (length formals) (length args)
     env <- bindArgs env (zip formals args)
     let k _ = ret VNil
@@ -166,7 +172,12 @@ evaluate globals env = eval where
           m <- ReadRef r
           case Map.lookup x m of
             Nothing -> runtimeError pos (printf "Undefined property '%s'." $ idString x)
-            Just v -> pure v
+            Just v -> do
+              case v of
+                VMethod m -> do
+                  identity <- NewRef ()
+                  pure (m identity)
+                _ -> pure v
         _ ->
           runtimeError pos "Only instances have properties."
 

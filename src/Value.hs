@@ -16,6 +16,7 @@ data Value
   | VString String
   | VFunc (Ref ()) String ( {-globals-}Env -> Pos -> [Value] -> Eff Value)
   | VInstance Identifier (Ref (Map Identifier Value))
+  | VMethod (Ref () -> Value)
 
 instance Show Value where
   show = \case
@@ -27,6 +28,7 @@ instance Show Value where
     VString s -> s
     VFunc _ name _  -> name
     VInstance Identifier{idString} _ -> idString ++ " instance"
+    VMethod{} -> error "Show Value/VMethod"
 
 isTruthy :: Value -> Bool
 isTruthy = \case
@@ -36,6 +38,7 @@ isTruthy = \case
   VNumber{} -> True
   VFunc{} -> True
   VInstance{} -> True
+  VMethod{} -> error "isTruthy/VMethod"
 
 vequal :: Value -> Value -> Bool
 vequal v1 v2 = case (v1,v2) of
