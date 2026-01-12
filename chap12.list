@@ -45,8 +45,8 @@ test/method/print_bound_method.lox
 test/method/refer_to_name.lox
 test/method/too_many_arguments.lox
 test/method/too_many_parameters.lox
-#test/number/decimal_point_at_eof.lox
-#test/number/trailing_dot.lox
+test/number/decimal_point_at_eof.lox
+test/number/trailing_dot.lox
 test/operator/equals_class.lox
 test/operator/equals_method.lox
 test/operator/not_class.lox

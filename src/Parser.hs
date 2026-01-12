@@ -220,10 +220,15 @@ start = program where
              , do
                  pos <- position
                  sym "."
-                 x <- varName "field"
-                 loop (EGetProp pos e1 x)
+                 alts
+                   [ do x <- varName "field"; loop (EGetProp pos e1 x)
+                   , do at <- lookingAt; reject (printf " at %s: Expect property name after '.'." at)
+                   ]
              , pure e1
              ]
+
+  lookingAt :: Par String
+  lookingAt = alts [do c <- sat (const True); pure (show c), pure "end"]
 
   max :: Int = 255
 
