@@ -22,7 +22,7 @@ test/field/get_on_bool.lox
 test/field/get_on_class.lox
 test/field/get_on_function.lox
 test/field/get_on_nil.lox
-#test/field/get_on_num.lox
+test/field/get_on_num.lox
 test/field/get_on_string.lox
 test/field/many.lox
 test/field/method_binds_this.lox
@@ -33,7 +33,7 @@ test/field/set_on_bool.lox
 test/field/set_on_class.lox
 test/field/set_on_function.lox
 test/field/set_on_nil.lox
-#test/field/set_on_num.lox
+test/field/set_on_num.lox
 test/field/set_on_string.lox
 test/field/undefined.lox
 test/method/arity.lox

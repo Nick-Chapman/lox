@@ -296,9 +296,9 @@ start = program where
       numberChars = do
         before <- some digit
         alts
-          [ do lit '.'
-               after <- some digit
-               pure (before ++ "." ++ after)
+          [ noError $ do lit '.'
+                         after <- some digit
+                         pure (before ++ "." ++ after)
           , pure before
           ]
 
