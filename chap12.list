@@ -42,7 +42,7 @@ test/method/extra_arguments.lox
 test/method/missing_arguments.lox
 test/method/not_found.lox
 test/method/print_bound_method.lox
-#test/method/refer_to_name.lox
+test/method/refer_to_name.lox
 test/method/too_many_arguments.lox
 test/method/too_many_parameters.lox
 #test/number/decimal_point_at_eof.lox

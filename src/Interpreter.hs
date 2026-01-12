@@ -2,8 +2,9 @@ module Interpreter (executeTopDecls) where
 
 import Ast (Stat(..),Exp(..),Func(..),Op1(..),Op2(..),Lit(..),Identifier(Identifier,idString))
 import Data.Map qualified as Map
-import Pos (Pos,showPos)
-import Runtime (Eff(Print,Error,NewRef,ReadRef,WriteRef,Clock),Ref)
+import Pos (Pos)
+import Runtime (Eff(NewRef,ReadRef,WriteRef),Ref)
+import Runtime qualified (Eff(..))
 import Text.Printf (printf)
 import Value (Value(..),Env(..),vequal,isTruthy)
 
@@ -22,7 +23,7 @@ makeNativeClock = do
   identity <- NewRef ()
   pure $ VFunc identity "<native fn>" $  \_globals pos args -> do
     checkArity pos 0 (length args)
-    VNumber <$> Clock
+    VNumber <$> Runtime.Clock
 
 executeDecls :: Env -> [Stat] -> Eff Env
 executeDecls globals = \case
@@ -40,7 +41,7 @@ execStat globals ret = execute where
       v <- evaluate globals env exp
       case ret of
         Just r -> r v
-        Nothing -> runtimeError pos "Can't return from top-level code."
+        Nothing -> Runtime.Error pos "Can't return from top-level code."
     SExp e -> \k -> do
       _ <- evaluate globals env e
       k env
@@ -116,13 +117,14 @@ execStat globals ret = execute where
       k (insertEnv env className classR)
 
 close :: Ref () -> (Value -> Eff Value) -> Env -> Func -> Value
-close identity ret env Func{name,formals,body} = do
-  let printName = printf "<fn %s>" $ idString name
+close identity ret env Func{name=fname,formals,body} = do
+  let printName = printf "<fn %s>" $ idString fname
   VFunc identity printName $ \globals pos args -> do
     checkArity pos (length formals) (length args)
-    env <- bindArgs env (zip formals args)
-    let k _ = ret VNil
-    execStat globals (Just ret) env body k
+    Runtime.WithFunctionCall pos (idString fname++"()") $ do
+      env <- bindArgs env (zip formals args)
+      let k _ = ret VNil
+      execStat globals (Just ret) env body k
 
 bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
 bindArgs env = \case
@@ -171,7 +173,7 @@ evaluate globals env = eval where
         VInstance _ r -> do
           m <- ReadRef r
           case Map.lookup x m of
-            Nothing -> runtimeError pos (printf "Undefined property '%s'." $ idString x)
+            Nothing -> Runtime.Error pos (printf "Undefined property '%s'." $ idString x)
             Just v -> do
               case v of
                 VMethod m -> do
@@ -179,7 +181,7 @@ evaluate globals env = eval where
                   pure (m identity)
                 _ -> pure v
         _ ->
-          runtimeError pos "Only instances have properties."
+          Runtime.Error pos "Only instances have properties."
 
     ESetProp pos e1 x e2 -> do
       v1 <- eval e1
@@ -190,7 +192,7 @@ evaluate globals env = eval where
           WriteRef r (Map.insert x v2 m)
           pure v2
         _ ->
-          runtimeError pos "Only instances have fields."
+          Runtime.Error pos "Only instances have fields."
 
   lookup :: Pos -> Identifier -> Eff (Ref Value)
   lookup pos x =
@@ -200,7 +202,7 @@ evaluate globals env = eval where
         case lookupEnv globals x of
           Just r -> pure r
           Nothing -> do
-            runtimeError pos (printf "Undefined variable '%s'." $ idString x)
+            Runtime.Error pos (printf "Undefined variable '%s'." $ idString x)
 
 insertEnv :: Env -> Identifier -> Ref Value -> Env
 insertEnv (Env m) x r = Env (Map.insert x r m)
@@ -242,12 +244,12 @@ asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
 asFunction func globals pos args = case func of
   VFunc _ _ f -> f globals pos args
   _ ->
-    runtimeError pos "Can only call functions and classes."
+    Runtime.Error pos "Can only call functions and classes."
 
 checkArity :: Pos -> Int -> Int -> Eff ()
 checkArity pos nformals nargs =
   if nformals == nargs then pure () else
-    runtimeError pos (printf "Expected %d arguments but got %d." nformals nargs)
+    Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
 
 vnegate :: Pos -> Value -> Eff Value
 vnegate pos v1 = do
@@ -257,14 +259,10 @@ vnegate pos v1 = do
 asNumber :: Pos -> String -> Value -> Eff Double
 asNumber pos message = \case
   VNumber n -> pure n
-  _ -> runtimeError pos message
+  _ -> Runtime.Error pos message
 
 vadd :: Pos -> (Value,Value) -> Eff Value
 vadd pos = \case
   (VNumber n1, VNumber n2) -> pure (VNumber (n1 + n2))
   (VString s1, VString s2) -> pure (VString (s1 ++ s2))
-  _ -> runtimeError pos "Operands must be two numbers or two strings."
-
-runtimeError :: Pos -> String -> Eff a
-runtimeError pos mes =
-  Error (printf "%s\n%s in script" mes (showPos pos))
+  _ -> Runtime.Error pos "Operands must be two numbers or two strings."

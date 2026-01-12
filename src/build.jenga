@@ -50,8 +50,10 @@ xdepends:
   echo 'Interpreter.o : LineCol.hi' >> $@
   echo 'Parser.o : LineCol.hi' >> $@
   echo 'Lox.o : LineCol.hi' >> $@
+  echo 'Runtime.o : LineCol.hi' >> $@
   echo 'Ast.o : JustLine.hi' >> $@
   echo 'Value.o : JustLine.hi' >> $@
   echo 'Interpreter.o : JustLine.hi' >> $@
   echo 'Parser.o : JustLine.hi' >> $@
   echo 'Lox.o : JustLine.hi' >> $@
+  echo 'Runtime.o : JustLine.hi' >> $@
