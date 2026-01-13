@@ -29,11 +29,11 @@ execStat :: Env -> Maybe (Value -> Eff a) -> Env -> Stat -> (Env -> Eff a) -> Ef
 execStat globals ret = execute where
 
   execute env = \case
-    SReturn pos exp -> \_ignored_k -> do
-      v <- evaluate globals env exp
+    SReturn pos expOpt -> \_ignored_k -> do
+      v <- case expOpt of Just exp -> evaluate globals env exp; Nothing -> pure VNil
       case ret of
         Just r -> r v
-        Nothing -> Runtime.Error pos "Can't return from top-level code."
+        Nothing -> Runtime.Error pos "Can't return from top-level code." -- prevented by resolved pass
     SExp e -> \k -> do
       _ <- evaluate globals env e
       k env

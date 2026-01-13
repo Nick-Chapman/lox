@@ -14,7 +14,7 @@ test/constructor/extra_arguments.lox
 test/constructor/init_not_method.lox
 test/constructor/missing_arguments.lox
 test/constructor/return_in_nested_function.lox
-#test/constructor/return_value.lox
+test/constructor/return_value.lox
 test/field/call_function_field.lox
 test/field/call_nonfunction_field.lox
 test/field/get_and_set_method.lox

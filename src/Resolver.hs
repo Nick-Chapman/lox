@@ -1,25 +1,23 @@
 module Resolver (resolveTop) where
 
-import Ast (Stat(..),Exp(..),Func(..))
+import Ast (Stat(..),Exp(..),Func(..),Identifier(..))
 import Pos (Pos,showPos)
 import Text.Printf (printf)
 
 type Res = Either String ()
 
-data Context = Context { atTopLevel :: Bool, withinClass :: Bool }
+data Scope = ScopeTop | ScopeFunc | ScopeInit
+
+data Context = Context { scope :: Scope, withinClass :: Bool }
 
 resolveTop :: [Stat] -> Res
 resolveTop xs = sequence_ [ resolveStatContext context x | x <- xs ]
-  where context = Context { atTopLevel = True, withinClass = False }
+  where context = Context { scope = ScopeTop, withinClass = False }
 
 resolveStatContext :: Context -> Stat -> Res
-resolveStatContext context@Context{atTopLevel,withinClass} = resolveStat
+resolveStatContext context@Context{scope,withinClass} = resolveStat
   where
     resolveStat = \case
-      SReturn pos exp ->
-        case atTopLevel of
-          True -> invalid pos "'return': Can't return from top-level code."
-          False -> do resolveExp exp
       SExp e -> resolveExp e
       SPrint e -> resolveExp e
       SBlock xs -> sequence_ [ resolveStat x | x <- xs ]
@@ -28,21 +26,23 @@ resolveStatContext context@Context{atTopLevel,withinClass} = resolveStat
       SFor (i,c,u) body -> do resolveStat i; resolveExp c; resolveStat u; resolveStat body
       SVarDecl _id e -> do resolveExp e
       SFunDecl Func{body} -> do
-        let context' = context { atTopLevel = False }
+        let context' = context { scope = ScopeFunc }
         resolveStatContext context' body
       SClassDecl _className ms -> do
-        let context' = context { atTopLevel = False
-                               , withinClass = True
-                               }
-        sequence_ [ resolveStatContext context' body | Func{body} <- ms ]
+        sequence_ [ resolveStatContext context' body
+                  | Func{name,body} <- ms
+                  , let scope' = if name == Identifier "init" then ScopeInit else ScopeFunc
+                  , let context' = context { scope = scope', withinClass = True }
+                  ]
+      SReturn _pos Nothing -> Right ()
+      SReturn pos (Just exp) ->
+        case scope of
+          ScopeTop -> invalid pos "'return': Can't return from top-level code."
+          ScopeInit -> invalid pos "'return': Can't return a value from an initializer."
+          ScopeFunc -> do resolveExp exp
 
     resolveExp :: Exp -> Res
     resolveExp = \case
-      EThis pos ->
-        case withinClass of
-          False -> invalid pos "'this': Can't use 'this' outside of a class."
-          True -> Right ()
-
       ELit _x -> Right ()
       EGrouping e -> do resolveExp e
       EBinary _pos e1 _op e2 -> do resolveExp e1; resolveExp e2
@@ -54,7 +54,10 @@ resolveStatContext context@Context{atTopLevel,withinClass} = resolveStat
       ECall _pos func args -> do resolveExp func; sequence_ [ resolveExp arg | arg <- args ]
       EGetProp _pos e _x -> do resolveExp e
       ESetProp _pos e1 _x e2 -> do resolveExp e1; resolveExp e2
-
+      EThis pos ->
+        case withinClass of
+          False -> invalid pos "'this': Can't use 'this' outside of a class."
+          True -> Right ()
 
 invalid :: Pos -> String -> Res
 invalid pos mes = Left $ printf "%s Error at %s" (showPos pos) mes

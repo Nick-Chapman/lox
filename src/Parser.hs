@@ -90,12 +90,12 @@ start = program where
   returnStat = do
     pos <- position
     key "return"
-    e <- alts
-      [ expression
-      , pure (ELit LNil)
+    eOpt <- alts
+      [ Just <$> expression
+      , pure Nothing
       ]
     sym ";"
-    pure (SReturn pos e)
+    pure (SReturn pos eOpt)
 
   forStat = do
     key "for"

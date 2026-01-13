@@ -9,7 +9,7 @@ data Stat
   | SIf Exp Stat Stat
   | SWhile Exp Stat
   | SFor (Stat,Exp,Stat) Stat
-  | SReturn Pos Exp
+  | SReturn Pos (Maybe Exp)
   | SVarDecl Identifier Exp
   | SFunDecl Func
   | SClassDecl Identifier [Func]
