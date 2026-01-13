@@ -18,14 +18,14 @@ resolveTop xs = runCheck $ sequence_ [ NestedScope $ resolveStatContext context 
   where context = Context { scope = ScopeTop, withinClass = False }
 
 resolveFunc :: Context -> Func -> Check ()
-resolveFunc context Func{name,formals,body} = do
+resolveFunc context Func{name,formals,statements} = do
   Define name
   NestedScope $ do
     sequence_ [ Define x | x <- formals ]
-    resolveStatContext context body
+    sequence_ [ resolveStatContext context s | s <- statements ]
 
 resolveStatContext :: Context -> Stat -> Check ()
-resolveStatContext context@Context{scope,withinClass} s = resolveStat s
+resolveStatContext context@Context{scope,withinClass} = resolveStat
   where
     resolveStat = \case
       SExp e -> resolveExp e

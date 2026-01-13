@@ -17,7 +17,7 @@ data Stat
 data Func = Func
   { name :: Identifier
   , formals :: [Identifier]
-  , body :: Stat
+  , statements :: [Stat]
   }
 
 data Exp

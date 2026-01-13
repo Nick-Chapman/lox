@@ -81,8 +81,10 @@ start = program where
   funDef = do
     name <- varName "fun-name"
     xs <- parameters
-    body <- blockStat
-    pure Func{ name, formals = xs, body }
+    sym "{"
+    statements <- many decl
+    sym "}"
+    pure Func{ name, formals = xs, statements }
 
   stat =
     alts [returnStat, forStat, whileStat, ifStat, printStat, blockStat, expressionStat]

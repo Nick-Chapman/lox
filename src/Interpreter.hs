@@ -75,7 +75,7 @@ execStat globals ret = execute where
       k (insertEnv env className classR)
 
 closeFunction :: (Value -> Eff Value) -> Env -> Func -> Value
-closeFunction ret env Func{name=Identifier{name=fname},formals,body} = do
+closeFunction ret env Func{name=Identifier{name=fname},formals,statements} = do
   VFunc $ Closure fname $ \self globals pos args -> do
     checkArity pos (length formals) (length args)
     Runtime.WithFunctionCall pos (fname++"()") $ do
@@ -83,10 +83,10 @@ closeFunction ret env Func{name=Identifier{name=fname},formals,body} = do
       env <- pure $ insertEnv env fname selfR
       env <- bindArgs env (zip formals args)
       let k _ = ret VNil
-      execStat globals (Just ret) env body k
+      execStat globals (Just ret) env (SBlock statements) k
 
 closeMethod :: String -> Env -> Func -> Method
-closeMethod className env Func{name=Identifier{name=fname},formals,body} = do
+closeMethod className env Func{name=Identifier{name=fname},formals,statements} = do
   Method $ \this@InstanceValue{myClass} -> do
     thisR <- NewRef (VInstance this)
     classR <- NewRef (VClass myClass)
@@ -101,7 +101,7 @@ closeMethod className env Func{name=Identifier{name=fname},formals,body} = do
         let retme _ = pure (VInstance this)
         let ret = if fname == "init" then retme else pure
         let k _ = ret VNil
-        execStat globals (Just ret) env body k
+        execStat globals (Just ret) env (SBlock statements) k
 
 makeInstance :: ClassValue -> Env -> Pos -> [Value] -> Eff Value
 makeInstance cv globals pos args = do
