@@ -57,23 +57,21 @@ start = program where
 
   classDecl = do
     key "class"
-    pos <- position
     x <- varName "class name"
     sym "{"
     ms <- many funDef
     sym "}"
-    pure (SClassDecl pos x ms)
+    pure (SClassDecl x ms)
 
   varDecl = do
     key "var"
-    pos <- position
     x <- varName "variable name"
     eopt <- alts
       [ do sym "="; expression
       , pure (ELit LNil)
       ]
     sym ";"
-    pure (SVarDecl pos x eopt)
+    pure (SVarDecl x eopt)
 
   funDecl = do
     key "fun"
@@ -81,11 +79,10 @@ start = program where
     pure (SFunDecl fun)
 
   funDef = do
-    pos <- position
     name <- varName "fun-name"
     xs <- parameters
     body <- blockStat
-    pure Func{ pos, name, formals = xs, body }
+    pure Func{ name, formals = xs, body }
 
   stat =
     alts [returnStat, forStat, whileStat, ifStat, printStat, blockStat, expressionStat]
@@ -157,12 +154,12 @@ start = program where
     e1 <- logicalOr
     alts [ do sym "="
               case e1 of
-                EVar pos x1 -> do
+                EVar x1 -> do
                   e2 <- assign
-                  pure (EAssign pos x1 e2)
-                EGetProp pos e1 x -> do
+                  pure (EAssign x1 e2)
+                EGetProp e1 x -> do
                   e2 <- assign
-                  pure (ESetProp pos e1 x e2)
+                  pure (ESetProp e1 x e2)
                 _ -> reject " at '=': Invalid assignment target."
          , pure e1
          ]
@@ -221,10 +218,9 @@ start = program where
                   xs <- arguments
                   loop (ECall pos e1 xs)
              , do
-                 pos <- position
                  sym "."
                  alts
-                   [ do x <- varName "field"; loop (EGetProp pos e1 x)
+                   [ do x <- varName "field"; loop (EGetProp e1 x)
                    , do at <- lookingAt; reject (printf " at %s: Expect property name after '.'." at)
                    ]
              , pure e1
@@ -235,15 +231,14 @@ start = program where
 
   max :: Int = 255
 
-  parameters :: Par [(Pos,Identifier)]
+  parameters :: Par [Identifier]
   parameters = bracketed $ alts [pure [], someArgs max]
     where
       err = reject_next (printf "Can't have more than %d parameters." max)
       someArgs n = if n == 0 then err else do
-        pos <- position
         x <- varName "param"
         xs <- alts [ pure [], do sym ","; someArgs (n-1) ]
-        pure ((pos,x):xs)
+        pure (x:xs)
 
 
   arguments :: Par [Exp]
@@ -264,14 +259,15 @@ start = program where
   primary = alts
     [ ELit <$> literal
     , do pos <- position; key "this"; pure (EThis pos)
-    , do pos <- position; EVar pos <$> varName "expression"
+    , EVar <$> varName "expression"
     , EGrouping <$> bracketed expression
     ]
 
   varName :: String -> Par Identifier
   varName expect = nibble $ do
+    pos <- position
     name <- identifier
-    if name `notElem` keywords then pure (Identifier name) else do
+    if name `notElem` keywords then pure (Identifier { pos, name} ) else do
       let message = printf " at '%s': Expect %s." name expect
       reject message
 

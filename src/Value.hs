@@ -1,13 +1,12 @@
 module Value (Value(..),Env(..),Closure(..),Method(..),BoundMethod(..),ClassValue(..),InstanceValue(..),isTruthy,vequal) where
 
-import Ast (Identifier(..))
 import Data.List (isSuffixOf)
 import Data.Map (Map)
 import Pos (Pos)
 import Runtime (Eff,Ref)
 import Text.Printf (printf)
 
-data Env = Env (Map Identifier (Ref Value))
+data Env = Env (Map String (Ref Value))
 
 data Value
   = VNil
@@ -21,18 +20,18 @@ data Value
   | VInstance InstanceValue
 
 data ClassValue = ClassValue { classIdentity :: Ref ()
-                             , className :: Identifier
-                             , methodMap :: Map Identifier Method }
+                             , className :: String
+                             , methodMap :: Map String Method }
 
 data Method = Method ( {-this-}InstanceValue -> Eff BoundMethod )
 
 data InstanceValue = InstanceValue { myClass :: ClassValue
-                                   , fields :: Ref (Map Identifier Value) }
+                                   , fields :: Ref (Map String Value) }
 
 data BoundMethod = BoundMethod { identity :: Ref ()
                                , closure :: Closure }
 
-data Closure = Closure { name :: Identifier
+data Closure = Closure { name :: String
                        , func :: {-self-}Value -> {-globals-}Env -> Pos -> [Value] -> Eff Value }
 
 instance Show Value where
@@ -44,10 +43,10 @@ instance Show Value where
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
     VNativeClockFun -> "<native fn>"
-    VFunc Closure{name}  -> printf "<fn %s>" (idString name)
-    VBoundMethod BoundMethod{closure=Closure{name}} -> printf "<fn %s>" (idString name)
-    VClass ClassValue{className} -> idString className
-    VInstance InstanceValue{myClass=ClassValue{className}} -> idString className ++ " instance"
+    VFunc Closure{name}  -> printf "<fn %s>" name
+    VBoundMethod BoundMethod{closure=Closure{name}} -> printf "<fn %s>" name
+    VClass ClassValue{className} -> className
+    VInstance InstanceValue{myClass=ClassValue{className}} -> className ++ " instance"
 
 isTruthy :: Value -> Bool
 isTruthy = \case

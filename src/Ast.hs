@@ -10,14 +10,13 @@ data Stat
   | SWhile Exp Stat
   | SFor (Stat,Exp,Stat) Stat
   | SReturn Pos (Maybe Exp)
-  | SVarDecl Pos Identifier Exp
+  | SVarDecl Identifier Exp
   | SFunDecl Func
-  | SClassDecl Pos Identifier [Func]
+  | SClassDecl Identifier [Func]
 
 data Func = Func
-  { pos :: Pos
-  , name :: Identifier
-  , formals :: [(Pos,Identifier)]
+  { name :: Identifier
+  , formals :: [Identifier]
   , body :: Stat
   }
 
@@ -26,14 +25,14 @@ data Exp
   | EGrouping Exp
   | EBinary Pos Exp Op2 Exp
   | EUnary Pos Op1 Exp
-  | EVar Pos Identifier
+  | EVar Identifier
   | EThis Pos
-  | EAssign Pos Identifier Exp
+  | EAssign Identifier Exp
   | ELogicalAnd Exp Exp
   | ELogicalOr Exp Exp
   | ECall Pos Exp [Exp]
-  | EGetProp Pos Exp Identifier
-  | ESetProp Pos Exp Identifier Exp
+  | EGetProp Exp Identifier
+  | ESetProp Exp Identifier Exp
 
 data Lit
   = LNil
@@ -45,4 +44,4 @@ data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
 
-data Identifier = Identifier { idString :: String } deriving (Eq,Ord)
+data Identifier = Identifier { pos :: Pos, name :: String }

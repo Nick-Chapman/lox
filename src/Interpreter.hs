@@ -1,6 +1,6 @@
 module Interpreter (executeTopDecls) where
 
-import Ast (Stat(..),Exp(..),Func(..),Op1(..),Op2(..),Lit(..),Identifier(Identifier,idString))
+import Ast (Stat(..),Exp(..),Func(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Data.Map qualified as Map
 import Pos (Pos)
 import Runtime (Eff(NewRef,ReadRef,WriteRef),Ref)
@@ -14,7 +14,7 @@ emptyEnv = Env Map.empty
 executeTopDecls :: [Stat] -> Eff Env
 executeTopDecls decls = do
   rClock <- NewRef VNativeClockFun
-  let globals = insertEnv emptyEnv (Identifier "clock") rClock
+  let globals = insertEnv emptyEnv "clock" rClock
   executeDecls globals decls
 
 executeDecls :: Env -> [Stat] -> Eff Env
@@ -60,44 +60,46 @@ execStat globals ret = execute where
     SFor (init,cond,update) body -> \k -> do
       let deSugared = SBlock [ init , SWhile cond $ SBlock [body,update] ]
       execute env deSugared k
-    SVarDecl _pos id e -> \k -> do
+    SVarDecl Identifier{name} e -> \k -> do
       r <- evaluate globals env e >>= NewRef
-      k (insertEnv env id r)
-    SFunDecl function@Func{name} -> \k -> do
+      k (insertEnv env name r)
+    SFunDecl function@Func{name=Identifier{name}} -> \k -> do
       r <- NewRef (closeFunction pure env function)
       k (insertEnv env name r)
-    SClassDecl _pos className methods -> \k -> do
+    SClassDecl Identifier{name=className} methods -> \k -> do
       classIdentity <- NewRef ()
-      let methodMap = Map.fromList [ (name,closeMethod className env func) | func@Func{name} <- methods ]
+      let methodMap = Map.fromList [ (name,closeMethod className env func)
+                                   | func@Func{name=Identifier{name}} <- methods
+                                   ]
       classR <- NewRef (VClass ClassValue { classIdentity, className, methodMap })
       k (insertEnv env className classR)
 
 closeFunction :: (Value -> Eff Value) -> Env -> Func -> Value
-closeFunction ret env Func{name=fname,formals,body} = do
+closeFunction ret env Func{name=Identifier{name=fname},formals,body} = do
   VFunc $ Closure fname $ \self globals pos args -> do
     checkArity pos (length formals) (length args)
-    Runtime.WithFunctionCall pos (idString fname++"()") $ do
+    Runtime.WithFunctionCall pos (fname++"()") $ do
       selfR <- NewRef self
       env <- pure $ insertEnv env fname selfR
       env <- bindArgs env (zip formals args)
       let k _ = ret VNil
       execStat globals (Just ret) env body k
 
-closeMethod :: Identifier -> Env -> Func -> Method
-closeMethod className env Func{name=fname,formals,body} = do
+closeMethod :: String -> Env -> Func -> Method
+closeMethod className env Func{name=Identifier{name=fname},formals,body} = do
   Method $ \this@InstanceValue{myClass} -> do
     thisR <- NewRef (VInstance this)
     classR <- NewRef (VClass myClass)
     env <- pure $ insertEnv env className classR
-    env <- pure $ insertEnv env (Identifier "this") thisR
+    env <- pure $ insertEnv env "this" thisR
     identity <- NewRef ()
     -- methods are not directly self recursive; must go via "this"
     pure $ BoundMethod identity $ Closure fname $ \_self globals pos args -> do
       checkArity pos (length formals) (length args)
-      Runtime.WithFunctionCall pos (idString fname++"()") $ do
+      Runtime.WithFunctionCall pos (fname++"()") $ do
         env <- bindArgs env (zip formals args)
         let retme _ = pure (VInstance this)
-        let ret = if fname == Identifier "init" then retme else pure
+        let ret = if fname == "init" then retme else pure
         let k _ = ret VNil
         execStat globals (Just ret) env body k
 
@@ -106,8 +108,7 @@ makeInstance cv globals pos args = do
   let ClassValue{methodMap} = cv
   fields <- NewRef Map.empty
   let this = InstanceValue {myClass=cv, fields}
-  let init = Identifier "init"
-  case Map.lookup init methodMap of
+  case Map.lookup "init" methodMap of
     Nothing -> do
       checkArity pos 0 (length args)
       pure (VInstance this)
@@ -117,10 +118,10 @@ makeInstance cv globals pos args = do
       _ignoredInitRV <- runClosure closure globals pos args
       pure (VInstance this)
 
-bindArgs :: Env -> [((Pos,Identifier),Value)] -> Eff (Env)
+bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
 bindArgs env = \case
   [] -> pure env
-  ((_pos,x),v):more -> do
+  (Identifier{name=x},v):more -> do
     r <- NewRef v
     bindArgs (insertEnv env x r) more
 
@@ -137,13 +138,13 @@ evaluate globals env = eval where
     EUnary pos op e -> do
       v <- eval e
       evalOp1 pos op v
-    EVar pos x -> do
+    EVar Identifier{pos,name=x} -> do
       r <- lookup pos x
       ReadRef r
     EThis pos -> do
-      r <- lookup pos (Identifier "this")
+      r <- lookup pos "this"
       ReadRef r
-    EAssign pos x e -> do
+    EAssign Identifier{pos,name=x} e -> do
       r <- lookup pos x
       v <- eval e
       WriteRef r v
@@ -159,7 +160,7 @@ evaluate globals env = eval where
       vargs <- mapM eval args
       asFunction vfunc globals pos vargs
 
-    EGetProp pos e x -> do
+    EGetProp e Identifier{pos,name=x} -> do
       eval e >>= \case
         VInstance this@InstanceValue{fields,myClass=ClassValue{methodMap}} -> do
           m <- ReadRef fields
@@ -169,11 +170,11 @@ evaluate globals env = eval where
               case Map.lookup x methodMap of
                 Just (Method m) -> VBoundMethod <$> m this
                 Nothing -> do
-                  Runtime.Error pos (printf "Undefined property '%s'." $ idString x)
+                  Runtime.Error pos (printf "Undefined property '%s'." $ x)
         _ ->
           Runtime.Error pos "Only instances have properties."
 
-    ESetProp pos e1 x e2 -> do
+    ESetProp e1 Identifier{pos,name=x} e2 -> do
       v1 <- eval e1
       v2 <- eval e2
       case v1 of
@@ -184,7 +185,7 @@ evaluate globals env = eval where
         _ ->
           Runtime.Error pos "Only instances have fields."
 
-  lookup :: Pos -> Identifier -> Eff (Ref Value)
+  lookup :: Pos -> String -> Eff (Ref Value)
   lookup pos x =
     case lookupEnv env x of
       Just r -> pure r
@@ -192,12 +193,12 @@ evaluate globals env = eval where
         case lookupEnv globals x of
           Just r -> pure r
           Nothing -> do
-            Runtime.Error pos (printf "Undefined variable '%s'." $ idString x)
+            Runtime.Error pos (printf "Undefined variable '%s'." $ x)
 
-insertEnv :: Env -> Identifier -> Ref Value -> Env
+insertEnv :: Env -> String -> Ref Value -> Env
 insertEnv (Env m) x r = Env (Map.insert x r m)
 
-lookupEnv :: Env -> Identifier -> Maybe (Ref Value)
+lookupEnv :: Env -> String -> Maybe (Ref Value)
 lookupEnv (Env m) x = Map.lookup x m
 
 evalLit :: Lit -> Value
