@@ -6,23 +6,20 @@ import Text.Printf (printf)
 
 type Res = Either String ()
 
-data Context = Script | Function | Method
-
-invalid :: Pos -> String -> Res
-invalid pos mes = Left $ printf "%s %s" (showPos pos) mes
+data Context = Context { atTopLevel :: Bool, withinClass :: Bool }
 
 resolveTop :: [Stat] -> Res
-resolveTop xs = sequence_ [ resolveStatContext Script x | x <- xs ]
+resolveTop xs = sequence_ [ resolveStatContext context x | x <- xs ]
+  where context = Context { atTopLevel = True, withinClass = False }
 
 resolveStatContext :: Context -> Stat -> Res
-resolveStatContext context = resolveStat
+resolveStatContext context@Context{atTopLevel,withinClass} = resolveStat
   where
     resolveStat = \case
       SReturn pos exp ->
-        case context of
-          Script -> invalid pos "Error at 'return': Can't return from top-level code."
-          Function -> do resolveExp exp
-          Method -> do resolveExp exp
+        case atTopLevel of
+          True -> invalid pos "'return': Can't return from top-level code."
+          False -> do resolveExp exp
       SExp e -> resolveExp e
       SPrint e -> resolveExp e
       SBlock xs -> sequence_ [ resolveStat x | x <- xs ]
@@ -30,16 +27,21 @@ resolveStatContext context = resolveStat
       SWhile cond body -> do resolveExp cond; resolveStat body
       SFor (i,c,u) body -> do resolveStat i; resolveExp c; resolveStat u; resolveStat body
       SVarDecl _id e -> do resolveExp e
-      SFunDecl Func{body} -> do resolveStatContext Function body
-      SClassDecl _className ms -> do sequence_ [ resolveStatContext Method body | Func{body} <- ms ]
+      SFunDecl Func{body} -> do
+        let context' = context { atTopLevel = False }
+        resolveStatContext context' body
+      SClassDecl _className ms -> do
+        let context' = context { atTopLevel = False
+                               , withinClass = True
+                               }
+        sequence_ [ resolveStatContext context' body | Func{body} <- ms ]
 
     resolveExp :: Exp -> Res
     resolveExp = \case
       EThis pos ->
-        case context of
-          Script -> invalid pos "Error at 'this': Can't use 'this' outside of a class."
-          Method -> Right ()
-          Function -> Right () -- invalid pos "" -- TODO: but might be in a class
+        case withinClass of
+          False -> invalid pos "'this': Can't use 'this' outside of a class."
+          True -> Right ()
 
       ELit _x -> Right ()
       EGrouping e -> do resolveExp e
@@ -52,3 +54,7 @@ resolveStatContext context = resolveStat
       ECall _pos func args -> do resolveExp func; sequence_ [ resolveExp arg | arg <- args ]
       EGetProp _pos e _x -> do resolveExp e
       ESetProp _pos e1 _x e2 -> do resolveExp e1; resolveExp e2
+
+
+invalid :: Pos -> String -> Res
+invalid pos mes = Left $ printf "%s Error at %s" (showPos pos) mes
