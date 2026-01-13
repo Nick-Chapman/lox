@@ -1,7 +1,7 @@
 test/block/empty.lox
 test/for/class_in_body.lox
 test/for/fun_in_body.lox
-#test/for/scope.lox
+test/for/scope.lox
 test/for/statement_condition.lox
 test/for/statement_increment.lox
 test/for/statement_initializer.lox

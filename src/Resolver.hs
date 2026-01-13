@@ -33,7 +33,7 @@ resolveStatContext context@Context{scope,withinClass} = resolveStat
       SBlock xs -> NestedScope $ sequence_ [ resolveStat x | x <- xs ]
       SIf cond s1 s2 -> do resolveExp cond; resolveStat s1; resolveStat s2
       SWhile cond body -> do resolveExp cond; resolveStat body
-      SFor (i,c,u) body -> do resolveStat i; resolveExp c; resolveStat u; resolveStat body
+      SFor (i,c,u) body -> NestedScope $ do resolveStat i; resolveExp c; resolveStat u; resolveStat body
       SVarDecl x e -> do Define x; resolveExp e
       SFunDecl func -> do
         let context' = context { scope = ScopeFunc }
