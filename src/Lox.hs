@@ -3,6 +3,7 @@ module Lox (main) where
 import Data.Text qualified as Text
 import Interpreter qualified (executeTopDecls)
 import Parser qualified (tryParse)
+import Resolver qualified (resolveTop)
 import Runtime (runEffect)
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..),exitWith)
@@ -16,15 +17,18 @@ main = do
     _:_:_ -> error "too any args"
     [filename] -> do
       contents <- Text.pack <$> readBinaryFile filename
-      case (Parser.tryParse contents) of
+      case Parser.tryParse contents of
         Left err -> abort 65 err
         Right decls -> do
-          Runtime.runEffect putOut (Interpreter.executeTopDecls decls) >>= \case
-            Right _globals' -> do
-              -- if/when support repl, we have the updated globals in hand
-              pure ()
-            Left err -> do
-              abort 70 err
+          case Resolver.resolveTop decls of
+            Left err -> abort 65 err
+            Right () ->
+              Runtime.runEffect putOut (Interpreter.executeTopDecls decls) >>= \case
+                Right _globals' -> do
+                  -- if/when support repl, we have the updated globals in hand
+                  pure ()
+                Left err -> do
+                  abort 70 err
 
 abort :: Int -> String -> IO a
 abort code mes = do

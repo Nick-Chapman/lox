@@ -15,6 +15,7 @@ chapters:
 
 fullpath.list: @chapters
   cat *.list | grep -v '^$$' | grep -v ^# | sed 's|^|~/other/craftinginterpreters/|' > $out
+  echo ./lambda.lox >> $out
 
 rules : fullpath.list rules.sh
   ./rules.sh < $in > $out
