@@ -57,21 +57,23 @@ start = program where
 
   classDecl = do
     key "class"
+    pos <- position
     x <- varName "class name"
     sym "{"
     ms <- many funDef
     sym "}"
-    pure (SClassDecl x ms)
+    pure (SClassDecl pos x ms)
 
   varDecl = do
     key "var"
+    pos <- position
     x <- varName "variable name"
     eopt <- alts
       [ do sym "="; expression
       , pure (ELit LNil)
       ]
     sym ";"
-    pure (SVarDecl x eopt)
+    pure (SVarDecl pos x eopt)
 
   funDecl = do
     key "fun"
@@ -79,10 +81,11 @@ start = program where
     pure (SFunDecl fun)
 
   funDef = do
+    pos <- position
     name <- varName "fun-name"
     xs <- parameters
     body <- blockStat
-    pure Func{ name, formals = xs, body }
+    pure Func{ pos, name, formals = xs, body }
 
   stat =
     alts [returnStat, forStat, whileStat, ifStat, printStat, blockStat, expressionStat]
@@ -232,14 +235,15 @@ start = program where
 
   max :: Int = 255
 
-  parameters :: Par [Identifier]
+  parameters :: Par [(Pos,Identifier)]
   parameters = bracketed $ alts [pure [], someArgs max]
     where
       err = reject_next (printf "Can't have more than %d parameters." max)
       someArgs n = if n == 0 then err else do
-        e <- varName "param"
-        es <- alts [ pure [], do sym ","; someArgs (n-1) ]
-        pure (e:es)
+        pos <- position
+        x <- varName "param"
+        xs <- alts [ pure [], do sym ","; someArgs (n-1) ]
+        pure ((pos,x):xs)
 
 
   arguments :: Par [Exp]

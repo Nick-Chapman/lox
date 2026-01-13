@@ -10,13 +10,14 @@ data Stat
   | SWhile Exp Stat
   | SFor (Stat,Exp,Stat) Stat
   | SReturn Pos (Maybe Exp)
-  | SVarDecl Identifier Exp
+  | SVarDecl Pos Identifier Exp
   | SFunDecl Func
-  | SClassDecl Identifier [Func]
+  | SClassDecl Pos Identifier [Func]
 
 data Func = Func
-  { name :: Identifier
-  , formals :: [Identifier]
+  { pos :: Pos
+  , name :: Identifier
+  , formals :: [(Pos,Identifier)]
   , body :: Stat
   }
 
@@ -44,4 +45,4 @@ data Op1 = Negate | Not
 
 data Op2 = Add | Sub | Mul | Div | Equals | NotEquals | Less | LessEqual | Greater | GreaterEqual
 
-data Identifier = Identifier { idString :: String } deriving (Eq,Ord,Show)
+data Identifier = Identifier { idString :: String } deriving (Eq,Ord)

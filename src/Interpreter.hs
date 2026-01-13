@@ -60,13 +60,13 @@ execStat globals ret = execute where
     SFor (init,cond,update) body -> \k -> do
       let deSugared = SBlock [ init , SWhile cond $ SBlock [body,update] ]
       execute env deSugared k
-    SVarDecl id e -> \k -> do
+    SVarDecl _pos id e -> \k -> do
       r <- evaluate globals env e >>= NewRef
       k (insertEnv env id r)
     SFunDecl function@Func{name} -> \k -> do
       r <- NewRef (closeFunction pure env function)
       k (insertEnv env name r)
-    SClassDecl className methods -> \k -> do
+    SClassDecl _pos className methods -> \k -> do
       classIdentity <- NewRef ()
       let methodMap = Map.fromList [ (name,closeMethod className env func) | func@Func{name} <- methods ]
       classR <- NewRef (VClass ClassValue { classIdentity, className, methodMap })
@@ -117,10 +117,10 @@ makeInstance cv globals pos args = do
       _ignoredInitRV <- runClosure closure globals pos args
       pure (VInstance this)
 
-bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
+bindArgs :: Env -> [((Pos,Identifier),Value)] -> Eff (Env)
 bindArgs env = \case
   [] -> pure env
-  (x,v):more -> do
+  ((_pos,x),v):more -> do
     r <- NewRef v
     bindArgs (insertEnv env x r) more
 
