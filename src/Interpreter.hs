@@ -6,24 +6,16 @@ import Pos (Pos)
 import Runtime (Eff(NewRef,ReadRef,WriteRef),Ref)
 import Runtime qualified (Eff(..))
 import Text.Printf (printf)
-import Value (Value(..),Env(..),vequal,isTruthy)
+import Value (Value(..),Env(..),Closure(..),Method(..),BoundMethod(..),ClassValue(..),InstanceValue(..),vequal,isTruthy)
 
 emptyEnv :: Env
 emptyEnv = Env Map.empty
 
 executeTopDecls :: [Stat] -> Eff Env
 executeTopDecls decls = do
-  vClock <- makeNativeClock
-  r <- NewRef vClock
-  let globals = insertEnv emptyEnv (Identifier "clock") r
+  rClock <- NewRef VNativeClockFun
+  let globals = insertEnv emptyEnv (Identifier "clock") rClock
   executeDecls globals decls
-
-makeNativeClock :: Eff Value
-makeNativeClock = do
-  identity <- NewRef ()
-  pure $ VFunc identity "<native fn>" $  \_globals pos args -> do
-    checkArity pos 0 (length args)
-    VNumber <$> Runtime.Clock
 
 executeDecls :: Env -> [Stat] -> Eff Env
 executeDecls globals = \case
@@ -72,59 +64,58 @@ execStat globals ret = execute where
       r <- evaluate globals env e >>= NewRef
       k (insertEnv env id r)
     SFunDecl function@Func{name} -> \k -> do
-      r <- NewRef (error "unreachable")
-      env <- pure $ insertEnv env name r
-      identity <- NewRef ()
-      let closure = close identity pure env function
-      WriteRef r closure
+      r <- NewRef (closeFunction pure env function)
       k (insertEnv env name r)
     SClassDecl className methods -> \k -> do
-      classR <- NewRef (error "unreachable")
-      let
-        makeInstance :: Env -> Pos -> [Value] -> Eff Value
-        makeInstance globals pos args = do
-          r <- NewRef (error "unreachable")
-          let this = VInstance className r
-          thisR <- NewRef this
-          env <- pure $ insertEnv env className classR
-          env <- pure $ insertEnv env (Identifier "this") thisR
-          let init = Identifier "init"
-          let retme _ = pure this
-          let binds =
-                [ let closure = VMethod (\identity -> close identity ret env func) in
-                  (name,closure)
-                | func@Func{name} <- methods
-                , let ret = if name==init then retme else pure
-                ]
-          let mm = Map.fromList binds
-          WriteRef r mm
-          case Map.lookup init mm of
-            Nothing -> do
-              checkArity pos 0 (length args)
-              pure this
-            Just v -> do
-              initM <- do
-                case v of
-                  VMethod m -> do
-                    identity <- NewRef ()
-                    pure (m identity)
-                  v -> pure v
-              _ignoredInitRV <- asFunction initM globals pos args
-              pure this
-
       classIdentity <- NewRef ()
-      WriteRef classR (VFunc classIdentity (idString className) makeInstance)
+      let methodMap = Map.fromList [ (name,closeMethod className env func) | func@Func{name} <- methods ]
+      classR <- NewRef (VClass ClassValue { classIdentity, className, methodMap })
       k (insertEnv env className classR)
 
-close :: Ref () -> (Value -> Eff Value) -> Env -> Func -> Value
-close identity ret env Func{name=fname,formals,body} = do
-  let printName = printf "<fn %s>" $ idString fname
-  VFunc identity printName $ \globals pos args -> do
+closeFunction :: (Value -> Eff Value) -> Env -> Func -> Value
+closeFunction ret env Func{name=fname,formals,body} = do
+  VFunc $ Closure fname $ \self globals pos args -> do
     checkArity pos (length formals) (length args)
     Runtime.WithFunctionCall pos (idString fname++"()") $ do
+      selfR <- NewRef self
+      env <- pure $ insertEnv env fname selfR
       env <- bindArgs env (zip formals args)
       let k _ = ret VNil
       execStat globals (Just ret) env body k
+
+closeMethod :: Identifier -> Env -> Func -> Method
+closeMethod className env Func{name=fname,formals,body} = do
+  Method $ \this@InstanceValue{myClass} -> do
+    thisR <- NewRef (VInstance this)
+    classR <- NewRef (VClass myClass)
+    env <- pure $ insertEnv env className classR
+    env <- pure $ insertEnv env (Identifier "this") thisR
+    identity <- NewRef ()
+    -- methods are not directly self recursive; must go via "this"
+    pure $ BoundMethod identity $ Closure fname $ \_self globals pos args -> do
+      checkArity pos (length formals) (length args)
+      Runtime.WithFunctionCall pos (idString fname++"()") $ do
+        env <- bindArgs env (zip formals args)
+        let retme _ = pure (VInstance this)
+        let ret = if fname == Identifier "init" then retme else pure
+        let k _ = ret VNil
+        execStat globals (Just ret) env body k
+
+makeInstance :: ClassValue -> Env -> Pos -> [Value] -> Eff Value
+makeInstance cv globals pos args = do
+  let ClassValue{methodMap} = cv
+  fields <- NewRef Map.empty
+  let this = InstanceValue {myClass=cv, fields}
+  let init = Identifier "init"
+  case Map.lookup init methodMap of
+    Nothing -> do
+      checkArity pos 0 (length args)
+      pure (VInstance this)
+    Just (Method m) -> do
+      bm <- m this
+      let BoundMethod{closure} = bm
+      _ignoredInitRV <- runClosure closure globals pos args
+      pure (VInstance this)
 
 bindArgs :: Env -> [(Identifier,Value)] -> Eff (Env)
 bindArgs env = \case
@@ -170,16 +161,15 @@ evaluate globals env = eval where
 
     EGetProp pos e x -> do
       eval e >>= \case
-        VInstance _ r -> do
-          m <- ReadRef r
+        VInstance this@InstanceValue{fields,myClass=ClassValue{methodMap}} -> do
+          m <- ReadRef fields
           case Map.lookup x m of
-            Nothing -> Runtime.Error pos (printf "Undefined property '%s'." $ idString x)
-            Just v -> do
-              case v of
-                VMethod m -> do
-                  identity <- NewRef ()
-                  pure (m identity)
-                _ -> pure v
+            Just v -> pure v
+            Nothing -> do
+              case Map.lookup x methodMap of
+                Just (Method m) -> VBoundMethod <$> m this
+                Nothing -> do
+                  Runtime.Error pos (printf "Undefined property '%s'." $ idString x)
         _ ->
           Runtime.Error pos "Only instances have properties."
 
@@ -187,9 +177,9 @@ evaluate globals env = eval where
       v1 <- eval e1
       v2 <- eval e2
       case v1 of
-        VInstance _ r -> do
-          m <- ReadRef r
-          WriteRef r (Map.insert x v2 m)
+        VInstance InstanceValue{fields} -> do
+          m <- ReadRef fields
+          WriteRef fields (Map.insert x v2 m)
           pure v2
         _ ->
           Runtime.Error pos "Only instances have fields."
@@ -242,9 +232,18 @@ evalOp2 pos v1 v2 = \case
 
 asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
 asFunction func globals pos args = case func of
-  VFunc _ _ f -> f globals pos args
+  VFunc closure -> runClosure closure globals pos args
+  VClass cv -> makeInstance cv globals pos args
+  VBoundMethod BoundMethod{closure} -> runClosure closure globals pos args
+  VNativeClockFun -> do
+    checkArity pos 0 (length args)
+    n <- Runtime.Clock
+    pure (VNumber n)
   _ ->
     Runtime.Error pos "Can only call functions and classes."
+
+runClosure :: Closure -> Env -> Pos -> [Value] -> Eff Value
+runClosure self@Closure{func} = func (VFunc self) -- tie recursive knot!
 
 checkArity :: Pos -> Int -> Int -> Eff ()
 checkArity pos nformals nargs =
