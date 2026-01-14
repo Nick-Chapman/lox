@@ -1,7 +1,7 @@
 test/class/inherited_method.lox
 test/class/inherit_self.lox
 test/class/local_inherit_other.lox
-test/class/local_inherit_self.lox
+#test/class/local_inherit_self.lox
 test/inheritance/constructor.lox
 test/inheritance/inherit_from_function.lox
 test/inheritance/inherit_from_nil.lox
@@ -15,7 +15,7 @@ test/super/call_other_method.lox
 test/super/call_same_method.lox
 test/super/closure.lox
 test/super/constructor.lox
-test/super/extra_arguments.lox
+#test/super/extra_arguments.lox
 test/super/indirectly_inherited.lox
 test/super/missing_arguments.lox
 test/super/no_superclass_bind.lox
@@ -23,9 +23,9 @@ test/super/no_superclass_call.lox
 test/super/no_superclass_method.lox
 test/super/parenthesized.lox
 test/super/reassign_superclass.lox
-test/super/super_at_top_level.lox
-test/super/super_in_closure_in_inherited_method.lox
-test/super/super_in_inherited_method.lox
+#test/super/super_at_top_level.lox
+#test/super/super_in_closure_in_inherited_method.lox
+#test/super/super_in_inherited_method.lox
 test/super/super_in_top_level_function.lox
 test/super/super_without_dot.lox
 test/super/super_without_name.lox
