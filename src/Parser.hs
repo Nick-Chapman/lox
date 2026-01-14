@@ -61,7 +61,9 @@ start = program where
     x <- varName "class name"
     optSuper <- alts
       [ do pure Nothing
-      , do sym "<"; Just <$> varName "super class"
+      , Just <$> do sym "<"; alts [ varName "super class"
+                                  , reject_at "Expect superclass name."
+                                  ]
       ]
     sym "{"
     ms <- many funDef
@@ -228,13 +230,10 @@ start = program where
                  sym "."
                  alts
                    [ do x <- varName "field"; loop (EGetProp e1 x)
-                   , do at <- lookingAt; reject (printf " at %s: Expect property name after '.'." at)
+                   , reject_at "Expect property name after '.'."
                    ]
              , pure e1
              ]
-
-  lookingAt :: Par String
-  lookingAt = alts [do c <- sat (const True); pure (show c), pure "end"]
 
   max :: Int = 255
 
@@ -266,10 +265,26 @@ start = program where
   primary = alts
     [ ELit <$> literal
     , EThis <$> do pos <- position; key "this"; pure pos
-    , ESuperVar <$> do key "super"; sym "."; varName "super-method"
+    , ESuperVar <$> do superRef
     , EVar <$> varName "expression"
     , EGrouping <$> bracketed expression
     ]
+
+  superRef :: Par Identifier
+  superRef = do
+    key "super"
+    alts
+      [ do sym "."; alts
+                    [ varName "super-method"
+                    , reject_at "Expect superclass method name."
+                    ]
+      , reject_at "Expect '.' after 'super'."
+      ]
+
+  reject_at :: String -> Par a
+  reject_at mes = do
+    at <- alts [do c <- sat (const True); pure (show c), pure "end"]
+    reject $ printf " at %s: %s" at mes
 
   varName :: String -> Par Identifier
   varName expect = nibble $ do
