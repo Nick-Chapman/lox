@@ -58,17 +58,23 @@ start = program where
 
   classDecl = do
     key "class"
-    x <- varName "class name"
+    me@Identifier{name=myName} <- varName "class name"
     optSuper <- alts
       [ do pure Nothing
-      , Just <$> do sym "<"; alts [ varName "super class"
-                                  , reject_at "Expect superclass name."
-                                  ]
+      , do
+          sym "<"
+          alts [ do
+                   super@Identifier{name=superName} <- varName "super class"
+                   if myName == superName
+                     then reject (printf " at '%s': A class can't inherit from itself." superName)
+                     else pure (Just super)
+               , reject_at "Expect superclass name."
+               ]
       ]
     sym "{"
     ms <- many funDef
     sym "}"
-    pure (SClassDecl x optSuper ms)
+    pure (SClassDecl me optSuper ms)
 
   varDecl = do
     key "var"
