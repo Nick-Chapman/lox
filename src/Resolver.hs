@@ -46,7 +46,7 @@ resolveStatContext context@Context{scope,withinClass} = resolveStat
       SFunDecl func -> do
         let context' = context { scope = ScopeFunc }
         resolveFunc context' func
-      SClassDecl classX ms -> do
+      SClassDecl classX _optSuper ms -> do
         Define classX
         sequence_ [ do resolveFunc context' func
                   | func@Func{name=Identifier{name}} <- ms
@@ -67,6 +67,7 @@ resolveStatContext context@Context{scope,withinClass} = resolveStat
       EBinary _pos e1 _op e2 -> do resolveExp e1; resolveExp e2
       EUnary _pos _op e -> do resolveExp e
       EVar _x -> do pure ()
+      ESuperVar _x -> do pure ()
       EAssign _x e -> do resolveExp e
       ELogicalAnd e1 e2 -> do resolveExp e1; resolveExp e2
       ELogicalOr e1 e2 -> do resolveExp e1; resolveExp e2

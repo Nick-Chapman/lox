@@ -21,6 +21,7 @@ data Value
 
 data ClassValue = ClassValue { classIdentity :: Ref ()
                              , className :: String
+                             , optSuper :: Maybe ClassValue
                              , methodMap :: Map String Method }
 
 data Method = Method ( {-this-}InstanceValue -> Eff BoundMethod )

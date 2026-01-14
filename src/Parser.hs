@@ -43,6 +43,7 @@ start = program where
     , "or"
     , "print"
     , "return"
+    , "super"
     , "this"
     , "true"
     , "var"
@@ -58,10 +59,14 @@ start = program where
   classDecl = do
     key "class"
     x <- varName "class name"
+    optSuper <- alts
+      [ do pure Nothing
+      , do sym "<"; Just <$> varName "super class"
+      ]
     sym "{"
     ms <- many funDef
     sym "}"
-    pure (SClassDecl x ms)
+    pure (SClassDecl x optSuper ms)
 
   varDecl = do
     key "var"
@@ -260,7 +265,8 @@ start = program where
   primary :: Par Exp
   primary = alts
     [ ELit <$> literal
-    , do pos <- position; key "this"; pure (EThis pos)
+    , EThis <$> do pos <- position; key "this"; pure pos
+    , ESuperVar <$> do key "super"; sym "."; varName "super-method"
     , EVar <$> varName "expression"
     , EGrouping <$> bracketed expression
     ]

@@ -12,7 +12,7 @@ data Stat
   | SReturn Pos (Maybe Exp)
   | SVarDecl Identifier Exp
   | SFunDecl Func
-  | SClassDecl Identifier [Func]
+  | SClassDecl Identifier (Maybe Identifier) [Func]
 
 data Func = Func
   { name :: Identifier
@@ -26,6 +26,7 @@ data Exp
   | EBinary Pos Exp Op2 Exp
   | EUnary Pos Op1 Exp
   | EVar Identifier
+  | ESuperVar Identifier
   | EThis Pos
   | EAssign Identifier Exp
   | ELogicalAnd Exp Exp

@@ -66,12 +66,18 @@ execStat globals ret = execute where
     SFunDecl function@Func{name=Identifier{name}} -> \k -> do
       r <- NewRef (closeFunction pure env function)
       k (insertEnv env name r)
-    SClassDecl Identifier{name=className} methods -> \k -> do
+    SClassDecl Identifier{name=className} optSuperX methods -> \k -> do
       classIdentity <- NewRef ()
+      optSuper <- case optSuperX of
+        Nothing -> pure Nothing
+        Just super@Identifier{pos} -> do
+          evaluate globals env (EVar super) >>= \case
+            VClass cv -> pure (Just cv)
+            _ -> Runtime.Error pos "Superclass must be a class."
       let methodMap = Map.fromList [ (name,closeMethod className env func)
                                    | func@Func{name=Identifier{name}} <- methods
                                    ]
-      classR <- NewRef (VClass ClassValue { classIdentity, className, methodMap })
+      classR <- NewRef (VClass ClassValue { classIdentity, className, optSuper, methodMap })
       k (insertEnv env className classR)
 
 closeFunction :: (Value -> Eff Value) -> Env -> Func -> Value
@@ -105,10 +111,9 @@ closeMethod className env Func{name=Identifier{name=fname},formals,statements} =
 
 makeInstance :: ClassValue -> Env -> Pos -> [Value] -> Eff Value
 makeInstance cv globals pos args = do
-  let ClassValue{methodMap} = cv
   fields <- NewRef Map.empty
   let this = InstanceValue {myClass=cv, fields}
-  case Map.lookup "init" methodMap of
+  case lookupMethod "init" cv of
     Nothing -> do
       checkArity pos 0 (length args)
       pure (VInstance this)
@@ -160,17 +165,34 @@ evaluate globals env = eval where
       vargs <- mapM eval args
       asFunction vfunc globals pos vargs
 
-    EGetProp e Identifier{pos,name=x} -> do
+    ESuperVar Identifier{pos,name} -> do
+      rThis <- lookup pos "this" -- TODO: remove hack
+      ReadRef rThis >>= \case
+        VInstance this@InstanceValue{myClass} -> do
+          let ClassValue{optSuper} = myClass
+          case optSuper of
+            Nothing -> do
+              -- resolver should prevent this runtime error
+              Runtime.Error pos "Can't use 'super' in a class with no superclass."
+            Just superClass -> do
+              case lookupMethod name superClass of
+                Just (Method m) -> VBoundMethod <$> m this
+                Nothing ->
+                  Runtime.Error pos (printf "Undefined property '%s'." name)
+        _ -> do
+          error "this is not an instance" -- TODO: remove hack
+
+    EGetProp e Identifier{pos,name} -> do
       eval e >>= \case
-        VInstance this@InstanceValue{fields,myClass=ClassValue{methodMap}} -> do
+        VInstance this@InstanceValue{fields,myClass} -> do
           m <- ReadRef fields
-          case Map.lookup x m of
+          case Map.lookup name m of
             Just v -> pure v
             Nothing -> do
-              case Map.lookup x methodMap of
+              case lookupMethod name myClass of
                 Just (Method m) -> VBoundMethod <$> m this
-                Nothing -> do
-                  Runtime.Error pos (printf "Undefined property '%s'." $ x)
+                Nothing ->
+                  Runtime.Error pos (printf "Undefined property '%s'." name)
         _ ->
           Runtime.Error pos "Only instances have properties."
 
@@ -194,6 +216,15 @@ evaluate globals env = eval where
           Just r -> pure r
           Nothing -> do
             Runtime.Error pos (printf "Undefined variable '%s'." $ x)
+
+lookupMethod :: String -> ClassValue -> Maybe Method
+lookupMethod name ClassValue{methodMap,optSuper} =
+  case Map.lookup name methodMap of
+    Just m -> Just m
+    Nothing ->
+      case optSuper of
+        Just super -> lookupMethod name super
+        Nothing -> Nothing
 
 insertEnv :: Env -> String -> Ref Value -> Env
 insertEnv (Env m) x r = Env (Map.insert x r m)

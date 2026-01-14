@@ -11,7 +11,7 @@ chapters:
   echo chap10.list >> $out  # +43 = 139
   echo chap11.list >> $out  #  +8 = 147
   echo chap12.list >> $out  # +60 = 207
-  #echo chap13.list >> $out  # +32 = 239
+  echo chap13.list >> $out  # +32 = 239
 
 fullpath.list: @chapters
   cat *.list | grep -v '^$$' | grep -v ^# | sed 's|^|~/other/craftinginterpreters/|' > $out
