@@ -5,4 +5,4 @@ test/variable/collide_with_parameter.lox
 test/variable/duplicate_local.lox
 test/variable/duplicate_parameter.lox
 test/variable/early_bound.lox
-#test/variable/use_local_in_initializer.lox
+test/variable/use_local_in_initializer.lox

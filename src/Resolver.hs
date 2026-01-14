@@ -7,14 +7,14 @@ import Text.Printf (printf)
 import Data.Set (Set)
 import Data.Set qualified as Set
 
-data Scope = ScopeTop | ScopeFunc | ScopeInit
+data Scope = ScopeTop | ScopeFunc | ScopeInit deriving (Eq,Show)
 
 data Context = Context { scope :: Scope, withinClass :: Bool }
 
 type Res = Either String ()
 
 resolveTop :: [Stat] -> Res
-resolveTop xs = runCheck $ sequence_ [ NestedScope $ resolveStatContext context x | x <- xs ]
+resolveTop xs = runCheck $ sequence_ [ resolveStatContext context x | x <- xs ]
   where context = Context { scope = ScopeTop, withinClass = False }
 
 resolveFunc :: Context -> Func -> Check ()
@@ -34,7 +34,15 @@ resolveStatContext context@Context{scope,withinClass} = resolveStat
       SIf cond s1 s2 -> do resolveExp cond; resolveStat s1; resolveStat s2
       SWhile cond body -> do resolveExp cond; resolveStat body
       SFor (i,c,u) body -> NestedScope $ do resolveStat i; resolveExp c; resolveStat u; resolveStat body
-      SVarDecl x e -> do Define x; resolveExp e
+      SVarDecl x@Identifier{name=_a} e -> do
+        nested <- IsNested
+        case e of
+          EVar Identifier{pos,name=_b}
+            | _a==_b && nested -> do
+                Invalid pos (printf "'%s': Can't read local variable in its own initializer." _a)
+          _ -> do
+            Define x
+            resolveExp e
       SFunDecl func -> do
         let context' = context { scope = ScopeFunc }
         resolveFunc context' func
@@ -76,24 +84,33 @@ data Check a where
   Invalid :: Pos -> String -> Check a
   NestedScope :: Check a -> Check a
   Define :: Identifier -> Check ()
+  IsNested :: Check Bool
 
 instance Functor Check where fmap = liftM
 instance Applicative Check where pure = Ret; (<*>) = ap
 instance Monad Check where (>>=) = Bind
 
+type State = Maybe (Set String)
+
 runCheck :: Check () -> Res
-runCheck check = loop Set.empty check $ \a _ -> Right a
+runCheck check = loop Nothing check $ \a _ -> Right a
   where
-    loop :: Set String -> Check a -> (a -> Set String -> Res) -> Res
-    loop xs = \case
-      Ret a -> \k -> k a xs
-      Bind m f -> \k -> loop xs m $ \a xs -> loop xs (f a) k
+    loop :: State -> Check a -> (a -> State -> Res) -> Res
+    loop s = \case
+      Ret a -> \k -> k a s
+      Bind m f -> \k -> loop s m $ \a s -> loop s (f a) k
       Invalid pos mes -> \_ignoredK -> invalid pos mes
-      NestedScope m -> \k -> loop Set.empty m $ \a _ -> k a xs
+      NestedScope m -> \k -> loop (Just Set.empty) m $ \a _ -> k a s
       Define Identifier{pos,name=x} -> \k -> do
-        case x `Set.member` xs of
-          False -> k () (Set.insert x xs)
-          True -> invalid pos (printf "'%s': Already a variable with this name in this scope." x)
+        case s of
+          Nothing -> k () Nothing
+          Just xs ->
+            case x `Set.member` xs of
+              False -> k () (Just (Set.insert x xs))
+              True -> invalid pos (printf "'%s': Already a variable with this name in this scope." x)
+      IsNested -> \k -> do
+        let nested = case s of Just{} -> True; Nothing -> False
+        k nested s
 
 invalid :: Pos -> String -> Res
 invalid pos mes = Left $ printf "%s Error at %s" (showPos pos) mes
