@@ -26,7 +26,7 @@ data Exp
   | EBinary Pos Exp Op2 Exp
   | EUnary Pos Op1 Exp
   | EVar Identifier
-  | ESuperVar Identifier
+  | ESuperVar Pos Identifier
   | EThis Pos
   | EAssign Identifier Exp
   | ELogicalAnd Exp Exp

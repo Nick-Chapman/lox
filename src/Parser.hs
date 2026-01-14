@@ -265,17 +265,17 @@ start = program where
   primary = alts
     [ ELit <$> literal
     , EThis <$> do pos <- position; key "this"; pure pos
-    , ESuperVar <$> do superRef
+    , superRef
     , EVar <$> varName "expression"
     , EGrouping <$> bracketed expression
     ]
 
-  superRef :: Par Identifier
   superRef = do
+    pos <- position
     key "super"
     alts
       [ do sym "."; alts
-                    [ varName "super-method"
+                    [ do x <- varName "super-method"; pure (ESuperVar pos x)
                     , reject_at "Expect superclass method name."
                     ]
       , reject_at "Expect '.' after 'super'."

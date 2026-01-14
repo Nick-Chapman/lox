@@ -165,7 +165,7 @@ evaluate globals env = eval where
       vargs <- mapM eval args
       asFunction vfunc globals pos vargs
 
-    ESuperVar Identifier{pos,name} -> do
+    ESuperVar pos Identifier{name,pos=pos2} -> do
       rThis <- lookup pos "this" -- TODO: remove hack
       ReadRef rThis >>= \case
         VInstance this@InstanceValue{myClass} -> do
@@ -178,7 +178,7 @@ evaluate globals env = eval where
               case lookupMethod name superClass of
                 Just (Method m) -> VBoundMethod <$> m this
                 Nothing ->
-                  Runtime.Error pos (printf "Undefined property '%s'." name)
+                  Runtime.Error pos2 (printf "Undefined property '%s'." name)
         _ -> do
           error "this is not an instance" -- TODO: remove hack
 

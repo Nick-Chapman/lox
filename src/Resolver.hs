@@ -9,13 +9,13 @@ import Data.Set qualified as Set
 
 data Scope = ScopeTop | ScopeFunc | ScopeInit deriving (Eq,Show)
 
-data Context = Context { scope :: Scope, withinClass :: Bool }
+data Context = Context { scope :: Scope, withinClass :: Maybe Bool }
 
 type Res = Either String ()
 
 resolveTop :: [Stat] -> Res
 resolveTop xs = runCheck $ sequence_ [ resolveStatContext context x | x <- xs ]
-  where context = Context { scope = ScopeTop, withinClass = False }
+  where context = Context { scope = ScopeTop, withinClass = Nothing }
 
 resolveFunc :: Context -> Func -> Check ()
 resolveFunc context Func{name,formals,statements} = do
@@ -46,12 +46,13 @@ resolveStatContext context@Context{scope,withinClass} = resolveStat
       SFunDecl func -> do
         let context' = context { scope = ScopeFunc }
         resolveFunc context' func
-      SClassDecl classX _optSuper ms -> do
+      SClassDecl classX optSuper ms -> do
         Define classX
+        let hasSuper = case optSuper of Nothing -> False; Just{} -> True
         sequence_ [ do resolveFunc context' func
                   | func@Func{name=Identifier{name}} <- ms
                   , let scope' = if name == "init" then ScopeInit else ScopeFunc
-                  , let context' = context { scope = scope', withinClass = True }
+                  , let context' = context { scope = scope', withinClass = Just hasSuper }
                   ]
       SReturn _pos Nothing -> pure ()
       SReturn pos (Just exp) ->
@@ -67,17 +68,21 @@ resolveStatContext context@Context{scope,withinClass} = resolveStat
       EBinary _pos e1 _op e2 -> do resolveExp e1; resolveExp e2
       EUnary _pos _op e -> do resolveExp e
       EVar _x -> do pure ()
-      ESuperVar _x -> do pure ()
       EAssign _x e -> do resolveExp e
       ELogicalAnd e1 e2 -> do resolveExp e1; resolveExp e2
       ELogicalOr e1 e2 -> do resolveExp e1; resolveExp e2
       ECall _pos func args -> do resolveExp func; sequence_ [ resolveExp arg | arg <- args ]
       EGetProp e _x -> do resolveExp e
       ESetProp e1 _x e2 -> do resolveExp e1; resolveExp e2
+      ESuperVar pos _x ->
+        case withinClass of
+          Nothing -> Invalid pos "'super': Can't use 'super' outside of a class."
+          Just False -> Invalid pos "'super': Can't use 'super' in a class with no superclass."
+          Just True -> pure ()
       EThis pos ->
         case withinClass of
-          False -> Invalid pos "'this': Can't use 'this' outside of a class."
-          True -> pure ()
+          Nothing -> Invalid pos "'this': Can't use 'this' outside of a class."
+          Just{} -> pure ()
 
 data Check a where
   Ret :: a -> Check a
