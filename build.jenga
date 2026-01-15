@@ -9,7 +9,15 @@ chapters:
   echo chap12.list >> $out  # +60 = 207
   echo chap13.list >> $out  # +32 = 239
 
-fullpath.list: @chapters
+groups:
+  echo parse-error.list          >> $out  #  40
+  echo resolve-error.list        >> $out  #  12
+  echo runtime-error.list        >> $out  #  61
+  echo successful-execution.list >> $out  # 127
+                                          #-----
+                                          # 239
+
+fullpath.list: @groups
   cat *.list | grep -v '^$$' | grep -v ^# | sed 's|^|~/other/craftinginterpreters/|' > $out
   echo ./lambda.lox >> $out #  +1 = 240
 

@@ -1,0 +1,12 @@
+test/constructor/return_value.lox
+test/return/at_top_level.lox
+test/super/no_superclass_bind.lox
+test/super/no_superclass_call.lox
+test/super/super_at_top_level.lox
+test/super/super_in_top_level_function.lox
+test/this/this_at_top_level.lox
+test/this/this_in_top_level_function.lox
+test/variable/collide_with_parameter.lox
+test/variable/duplicate_local.lox
+test/variable/duplicate_parameter.lox
+test/variable/use_local_in_initializer.lox
