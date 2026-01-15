@@ -18,21 +18,21 @@ main = do
     [filename] -> do
       contents <- Text.pack <$> readBinaryFile filename
       case Parser.tryParse contents of
-        Left err -> abort 65 err
+        Left err -> abort 65 [err]
         Right decls -> do
           case Resolver.resolveTop decls of
-            Left err -> abort 65 err
-            Right () ->
+            errs@(_:_)-> abort 65 errs
+            [] ->
               Runtime.runEffect putOut (Interpreter.executeTopDecls decls) >>= \case
                 Right _globals' -> do
                   -- if/when support repl, we have the updated globals in hand
                   pure ()
                 Left err -> do
-                  abort 70 err
+                  abort 70 [err]
 
-abort :: Int -> String -> IO a
-abort code mes = do
-  putErr mes
+abort :: Int -> [String] -> IO a
+abort code errs = do
+  mapM_ putErr errs
   exitWith (ExitFailure code)
 
 putErr :: String -> IO ()

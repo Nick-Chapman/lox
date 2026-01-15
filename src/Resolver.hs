@@ -11,7 +11,7 @@ data Scope = ScopeTop | ScopeFunc | ScopeInit deriving (Eq,Show)
 
 data Context = Context { scope :: Scope, withinClass :: Maybe Bool }
 
-type Res = Either String ()
+type Res = [String]
 
 resolveTop :: [Stat] -> Res
 resolveTop xs = runCheck $ sequence_ [ resolveStatContext context x | x <- xs ]
@@ -87,7 +87,7 @@ resolveStatContext context@Context{scope,withinClass} = resolveStat
 data Check a where
   Ret :: a -> Check a
   Bind :: Check a -> (a -> Check b) -> Check b
-  Invalid :: Pos -> String -> Check a
+  Invalid :: Pos -> String -> Check ()
   NestedScope :: Check a -> Check a
   Define :: Identifier -> Check ()
   IsNested :: Check Bool
@@ -99,24 +99,26 @@ instance Monad Check where (>>=) = Bind
 type State = Maybe (Set String)
 
 runCheck :: Check () -> Res
-runCheck check = loop Nothing check $ \a _ -> Right a
+runCheck check = loop Nothing check $ \() _ -> []
   where
     loop :: State -> Check a -> (a -> State -> Res) -> Res
     loop s = \case
       Ret a -> \k -> k a s
       Bind m f -> \k -> loop s m $ \a s -> loop s (f a) k
-      Invalid pos mes -> \_ignoredK -> invalid pos mes
+      Invalid pos mes -> \k -> invalid pos mes : k () s
       NestedScope m -> \k -> loop (Just Set.empty) m $ \a _ -> k a s
-      Define Identifier{pos,name=x} -> \k -> do
+      Define Identifier{pos,name=x} -> do
         case s of
-          Nothing -> k () Nothing
+          Nothing -> \k -> k () Nothing
           Just xs ->
             case x `Set.member` xs of
-              False -> k () (Just (Set.insert x xs))
-              True -> invalid pos (printf "'%s': Already a variable with this name in this scope." x)
+              False -> \k -> do k () (Just (Set.insert x xs))
+              True -> \k -> do
+                let mes = printf "'%s': Already a variable with this name in this scope." x
+                invalid pos mes : k () s
       IsNested -> \k -> do
         let nested = case s of Just{} -> True; Nothing -> False
         k nested s
 
-invalid :: Pos -> String -> Res
-invalid pos mes = Left $ printf "%s Error at %s" (showPos pos) mes
+invalid :: Pos -> String -> String
+invalid pos mes = printf "%s Error at %s" (showPos pos) mes
