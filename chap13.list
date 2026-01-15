@@ -15,7 +15,7 @@ test/super/call_other_method.lox
 test/super/call_same_method.lox
 test/super/closure.lox
 test/super/constructor.lox
-#test/super/extra_arguments.lox
+test/super/extra_arguments.lox
 test/super/indirectly_inherited.lox
 test/super/missing_arguments.lox
 test/super/no_superclass_bind.lox
