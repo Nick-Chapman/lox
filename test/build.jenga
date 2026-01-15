@@ -21,7 +21,14 @@ fullpath.list: @groups
   cat *.list | grep -v '^$$' | grep -v ^# | sed 's|^|~/other/craftinginterpreters/|' > $out
   echo ./lambda.lox >> $out #  +1 = 240
 
+lambda.lox : ../examples/lambda.lox :
+
+
 rules : fullpath.list rules.sh
   ./rules.sh < $in > $out
 
 include rules
+
+
+exe-under-test : ../src/lox.exe : ln $in $out
+reference-lox : ~/other/craftinginterpreters/clox : ln $in $out
