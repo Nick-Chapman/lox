@@ -74,7 +74,7 @@ execStat globals ret = execute where
           evaluate globals env (EVar super) >>= \case
             VClass cv -> pure (Just cv)
             _ -> Runtime.Error pos "Superclass must be a class."
-      let methodMap = Map.fromList [ (name,closeMethod className env func)
+      let methodMap = Map.fromList [ (name,closeMethod className optSuper env func)
                                    | func@Func{name=Identifier{name}} <- methods
                                    ]
       classR <- NewRef (VClass ClassValue { classIdentity, className, optSuper, methodMap })
@@ -91,13 +91,18 @@ closeFunction ret env Func{name=Identifier{name=fname},formals,statements} = do
       let k _ = ret VNil
       execStat globals (Just ret) env (SBlock statements) k
 
-closeMethod :: String -> Env -> Func -> Method
-closeMethod className env Func{name=Identifier{name=fname},formals,statements} = do
+closeMethod :: String -> Maybe ClassValue -> Env -> Func -> Method
+closeMethod className optSuper env Func{name=Identifier{name=fname},formals,statements} = do
   Method $ \this@InstanceValue{myClass} -> do
     thisR <- NewRef (VInstance this)
     classR <- NewRef (VClass myClass)
     env <- pure $ insertEnv env className classR
     env <- pure $ insertEnv env "this" thisR
+    env <- case optSuper of
+      Nothing -> pure env
+      Just super -> do
+        superR <- NewRef (VClass super)
+        pure $ insertEnv env "super" superR
     identity <- NewRef ()
     -- methods are not directly self recursive; must go via "this"
     pure $ BoundMethod identity $ Closure fname $ \_self globals pos args -> do
@@ -165,22 +170,19 @@ evaluate globals env = eval where
       vargs <- mapM eval args
       asFunction vfunc globals pos vargs
 
-    ESuperVar pos Identifier{name,pos=pos2} -> do
-      rThis <- lookup pos "this" -- TODO: remove hack
-      ReadRef rThis >>= \case
-        VInstance this@InstanceValue{myClass} -> do
-          let ClassValue{optSuper} = myClass
-          case optSuper of
-            Nothing -> do
-              -- resolver should prevent this runtime error
-              Runtime.Error pos "Can't use 'super' in a class with no superclass."
-            Just superClass -> do
-              case lookupMethod name superClass of
-                Just (Method m) -> VBoundMethod <$> m this
-                Nothing ->
-                  Runtime.Error pos2 (printf "Undefined property '%s'." name)
+    ESuperVar pos Identifier{name,pos=posX} -> do
+      lookup pos "super" >>= ReadRef >>= \case
+        VClass superClass ->
+          case lookupMethod name superClass of
+            Just (Method m) ->
+              (lookup pos "this" >>= ReadRef) >>= \case
+                VInstance this ->
+                  VBoundMethod <$> m this
+                _ -> error "impossible: this is not an instance"
+            Nothing ->
+              Runtime.Error posX (printf "Undefined property '%s'." name)
         _ -> do
-          error "this is not an instance" -- TODO: remove hack
+          error "impossible: super is not a class value"
 
     EGetProp e Identifier{pos,name} -> do
       eval e >>= \case
