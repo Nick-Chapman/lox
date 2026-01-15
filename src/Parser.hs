@@ -23,10 +23,11 @@ tryParse = either (Left . formatError) Right . Par4.runParser Par4.Config
 
 formatError :: (Pos,Text,Maybe String) -> String
 formatError (pos,text,opt) = do
-  let tok = case Text.uncons text of Nothing -> "EOF"; Just (x,_) -> show x
+  let _tok = case Text.uncons text of Nothing -> "EOF"; Just (x,_) -> show x
   printf "%s Error%s" (showPos pos) $ case opt of
     Just mes -> mes
-    Nothing -> printf ": Unexpected %s." tok
+    Nothing -> printf ": Unexpected %s." _tok
+    --Nothing -> ": Unexpected character."
 
 start :: Par [Stat]
 start = program where
@@ -93,9 +94,16 @@ start = program where
 
   funDef = do
     name <- varName "fun-name"
+    sym "(";
     xs <- parameters
-    sym "{"
-    statements <- many decl
+    alts
+      [ sym ")"
+      , reject_at "Expect ')' after parameters."
+      ]
+    statements <- alts
+      [ do sym "{"; many decl
+      , reject_at "Expect '{' before function body."
+      ]
     sym "}"
     pure Func{ name, formals = xs, statements }
 
@@ -117,19 +125,20 @@ start = program where
     sym "("
     init <- alts
       [ varDecl
-      , do sym ";"; pure (SBlock [])
       , expressionStat
+      , do sym ";"; pure (SBlock [])
+      , reject_at "Expect expression."
       ]
     cond <- alts
-      [ expression
-      , pure (ELit (LBool True))
+      [ do e <- expression; sym ";"; pure e
+      , do sym ";"; pure (ELit (LBool True))
+      , reject_at "Expect expression."
       ]
-    sym ";"
     update <- alts
-      [ do e <- expression; pure (SExp e)
-      , do pure (SBlock [])
+      [ do e <- expression; sym ")"; pure (SExp e)
+      , do sym ")"; pure (SBlock [])
+      , reject_at "Expect expression."
       ]
-    sym ")"
     body <- stat
     pure (SFor (init,cond,update) body)
 
@@ -148,7 +157,10 @@ start = program where
 
   printStat = do
     key "print"
-    e <- expression
+    e <- alts
+      [ expression
+      , reject_at "Expect expression."
+      ]
     sym ";"
     pure (SPrint e)
 
@@ -230,7 +242,7 @@ start = program where
     where
       loop e1 = do
         alts [ do pos <- position
-                  xs <- arguments
+                  xs <- bracketed arguments
                   loop (ECall pos e1 xs)
              , do
                  sym "."
@@ -244,7 +256,7 @@ start = program where
   max :: Int = 255
 
   parameters :: Par [Identifier]
-  parameters = bracketed $ alts [pure [], someArgs max]
+  parameters = alts [pure [], someArgs max]
     where
       err = reject_next (printf "Can't have more than %d parameters." max)
       someArgs n = if n == 0 then err else do
@@ -254,7 +266,7 @@ start = program where
 
 
   arguments :: Par [Exp]
-  arguments = bracketed $ alts [pure [], someArgs max]
+  arguments = alts [pure [], someArgs max]
     where
       err = reject_next (printf "Can't have more than %d arguments." max)
       someArgs n = if n == 0 then err else do

@@ -1,7 +1,7 @@
 test/class/inherited_method.lox
 test/class/inherit_self.lox
 test/class/local_inherit_other.lox
-#test/class/local_inherit_self.lox
+test/class/local_inherit_self.lox
 test/inheritance/constructor.lox
 test/inheritance/inherit_from_function.lox
 test/inheritance/inherit_from_nil.lox
