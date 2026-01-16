@@ -1,55 +1,42 @@
 module Parser (tryParse) where
 
 import Ast (Stat(..),Func(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
-import Control.Applicative (many,some)
+import Control.Applicative (many)
 import Data.Text (Text)
 import Data.Text qualified as Text (uncons)
-import Par4 (lit,sat,alts,noError,position,reject)
+import Par4 (alts,position,satisfy,expect,reject)
 import Par4 qualified (runParser,Par,Config(..))
-import Pos (Pos,initPos,tickPos,showPos)
+import Pos (Pos,initPos,showPos)
+import Pos qualified (tickPos)
 import Text.Printf (printf)
-import qualified Data.Char as Char (isAlpha,isDigit)
+import qualified Data.Char as Char (isAlpha,isDigit,isSpace)
 
-type Token = Char
-type Par = Par4.Par Pos Token
+type Par = Par4.Par Pos Tok
 
 tryParse :: Text -> Either String [Stat]
 tryParse = either (Left . formatError) Right . Par4.runParser Par4.Config
   { start
   , initPos
   , tickPos
-  , scanToken = Text.uncons
+  , scanTok
   }
 
 formatError :: (Pos,Text,Maybe String) -> String
 formatError (pos,text,opt) = do
-  let _tok = case Text.uncons text of Nothing -> "EOF"; Just (x,_) -> show x
-  printf "%s Error%s" (showPos pos) $ case opt of
-    Just mes -> mes
-    Nothing -> printf ": Unexpected %s." _tok
-    --Nothing -> ": Unexpected character."
+  case opt of
+    Nothing -> do
+      let tok = case scanTok text of Nothing -> "EOF"; Just (x,_) -> show x
+      printf "%s Error: Unexpected '%s'." (showPos pos) tok
+
+    -- No "at end"
+    Just (mes@"Unterminated string") -> printf "%s Error: %s." (showPos pos) mes
+
+    Just mes -> do
+      let tok = case scanTok text of Nothing -> "end"; Just (x,_) -> printf "'%s'" (show x)
+      printf "%s Error at %s: %s"(showPos pos) tok mes
 
 start :: Par [Stat]
 start = program where
-
-  keywords =
-    [ "and"
-    , "class"
-    , "else"
-    , "false"
-    , "for"
-    , "fun"
-    , "if"
-    , "nil"
-    , "or"
-    , "print"
-    , "return"
-    , "super"
-    , "this"
-    , "true"
-    , "var"
-    , "while"
-    ]
 
   program = do
     whitespace
@@ -59,27 +46,29 @@ start = program where
 
   classDecl = do
     key "class"
-    me@Identifier{name=myName} <- varName "class name"
+    me@Identifier{name=myName} <- identifier
     optSuper <- alts
       [ do pure Nothing
-      , do
-          sym "<"
-          alts [ do
-                   super@Identifier{name=superName} <- varName "super class"
-                   if myName == superName
-                     then reject (printf " at '%s': A class can't inherit from itself." superName)
-                     else pure (Just super)
-               , reject_at "Expect superclass name."
-               ]
+      , Just <$> do sym "<"; superClassOf myName
       ]
     sym "{"
     ms <- many funDef
     sym "}"
     pure (SClassDecl me optSuper ms)
 
+  superClassOf :: String -> Par Identifier
+  superClassOf childName = do
+    super <- alts
+      [ identifier
+      , expect "Expect superclass name."
+      ]
+    let Identifier{name=superName} = super
+    if superName /= childName then pure super else
+      reject "A class can't inherit from itself."
+
   varDecl = do
     key "var"
-    x <- varName "variable name"
+    x <- alts [identifier, expect "Expect variable name."]
     eopt <- alts
       [ do sym "="; expression
       , pure (ELit LNil)
@@ -93,17 +82,18 @@ start = program where
     pure (SFunDecl fun)
 
   funDef = do
-    name <- varName "fun-name"
+    name <- identifier
     sym "(";
     xs <- parameters
     alts
       [ sym ")"
-      , reject_at "Expect ')' after parameters."
+      , expect "Expect ')' after parameters."
       ]
-    statements <- alts
-      [ do sym "{"; many decl
-      , reject_at "Expect '{' before function body."
+    alts
+      [ do sym "{"
+      , expect "Expect '{' before function body."
       ]
+    statements <- many decl
     sym "}"
     pure Func{ name, formals = xs, statements }
 
@@ -127,17 +117,14 @@ start = program where
       [ varDecl
       , expressionStat
       , do sym ";"; pure (SBlock [])
-      , reject_at "Expect expression."
       ]
     cond <- alts
       [ do e <- expression; sym ";"; pure e
       , do sym ";"; pure (ELit (LBool True))
-      , reject_at "Expect expression."
       ]
     update <- alts
       [ do e <- expression; sym ")"; pure (SExp e)
       , do sym ")"; pure (SBlock [])
-      , reject_at "Expect expression."
       ]
     body <- stat
     pure (SFor (init,cond,update) body)
@@ -157,10 +144,7 @@ start = program where
 
   printStat = do
     key "print"
-    e <- alts
-      [ expression
-      , reject_at "Expect expression."
-      ]
+    e <- expression
     sym ";"
     pure (SPrint e)
 
@@ -179,15 +163,17 @@ start = program where
 
   assign = do
     e1 <- logicalOr
-    alts [ do sym "="
-              case e1 of
-                EVar x1 -> do
-                  e2 <- assign
-                  pure (EAssign x1 e2)
-                EGetProp e1 x -> do
-                  e2 <- assign
-                  pure (ESetProp e1 x e2)
-                _ -> reject " at '=': Invalid assignment target."
+    alts [ do
+             sym "="
+             case e1 of
+               EVar x1 -> do
+                 e2 <- assign
+                 pure (EAssign x1 e2)
+               EGetProp e1 x -> do
+                 e2 <- assign
+                 pure (ESetProp e1 x e2)
+               _ -> do
+                 reject "Invalid assignment target."
          , pure e1
          ]
 
@@ -247,8 +233,8 @@ start = program where
              , do
                  sym "."
                  alts
-                   [ do x <- varName "field"; loop (EGetProp e1 x)
-                   , reject_at "Expect property name after '.'."
+                   [ do x <- identifier; loop (EGetProp e1 x)
+                   , expect "Expect property name after '.'."
                    ]
              , pure e1
              ]
@@ -258,68 +244,66 @@ start = program where
   parameters :: Par [Identifier]
   parameters = alts [pure [], someArgs max]
     where
-      err = reject_next (printf "Can't have more than %d parameters." max)
+      err = expect (printf "Can't have more than %d parameters." max)
       someArgs n = if n == 0 then err else do
-        x <- varName "param"
+        x <- identifier
         xs <- alts [ pure [], do sym ","; someArgs (n-1) ]
         pure (x:xs)
-
 
   arguments :: Par [Exp]
   arguments = alts [pure [], someArgs max]
     where
-      err = reject_next (printf "Can't have more than %d arguments." max)
+      err = expect (printf "Can't have more than %d arguments." max)
       someArgs n = if n == 0 then err else do
         e <- expression
         es <- alts [ pure [], do sym ","; someArgs (n-1) ]
         pure (e:es)
 
-  reject_next :: String -> Par a
-  reject_next msg = do
-    c <- next
-    reject (printf " at %s: %s" (show c) msg)
-
   primary :: Par Exp
   primary = alts
-    [ ELit <$> literal
-    , EThis <$> do pos <- position; key "this"; pure pos
+    [ grouping
+    , literal
+    , varRef
+    , thisRef
     , superRef
-    , EVar <$> varName "expression"
-    , EGrouping <$> bracketed expression
+    , unterminated_string
+    , badNumberLit
+    , expect "Expect expression."
     ]
 
-  superRef = do
-    pos <- position
-    key "super"
-    alts
-      [ do sym "."; alts
-                    [ do x <- varName "super-method"; pure (ESuperVar pos x)
-                    , reject_at "Expect superclass method name."
-                    ]
-      , reject_at "Expect '.' after 'super'."
-      ]
+  grouping =
+    EGrouping <$> bracketed expression
 
-  reject_at :: String -> Par a
-  reject_at mes = do
-    at <- alts [do c <- sat (const True); pure (show c), pure "end"]
-    reject $ printf " at %s: %s" at mes
-
-  varName :: String -> Par Identifier
-  varName expect = nibble $ do
-    pos <- position
-    name <- identifier
-    if name `notElem` keywords then pure (Identifier { pos, name} ) else do
-      let message = printf " at '%s': Expect %s." name expect
-      reject message
-
-  literal :: Par Lit
-  literal = alts
+  literal = ELit <$> alts
     [ do key "nil"; pure LNil
     , do key "true"; pure (LBool True)
     , do key "false"; pure (LBool False)
     , LNumber <$> numberLit
     , LString <$> stringLit
     ]
+
+  varRef =
+    EVar <$> identifier
+
+  thisRef = do
+    pos <- position
+    key "this"
+    pure (EThis pos)
+
+  superRef = do
+    pos <- position
+    key "super"
+    alts
+      [ do sym "."; alts
+                    [ do x <- identifier; pure (ESuperVar pos x)
+                    , expect "Expect superclass method name."
+                    ]
+      , expect "Expect '.' after 'super'."
+      ]
+
+  badNumberLit = do
+    sym "."
+    reject "Expect expression."
 
   leftAssoc :: Par Exp -> Par (Exp -> Exp -> Exp) -> Par Exp
   leftAssoc subPar opPar = subPar >>= loop
@@ -337,66 +321,187 @@ start = program where
     sym ")"
     pure x
 
-  numberLit = alts [nibble (read <$> numberChars), badNumberLit]
-    where
-      numberChars = do
-        before <- some digit
-        alts
-          [ noError $ do lit '.'
-                         after <- some digit
-                         pure (before ++ "." ++ after)
-          , pure before
-          ]
-
-  badNumberLit = do
-    lit '.'
-    reject " at '.': Expect expression."
-
-  stringLit = nibble $ do
-    doubleQuote
-    x <- many stringLitChar
-    alts [doubleQuote
-         , reject ": Unterminated string."
-         ]
-    pure x
-    where
-      doubleQuote = lit '"'
-      stringLitChar = sat $ \c -> c /= '"'
-
-  sym s = nibble (noError (mapM_ lit s))
-
-  key s =
-    if s `notElem` keywords then error (printf "Add \"%s\" to keywords list" s) else do
-      nibble $ noError $ do
-        s' <- identifier
-        if s == s' then pure () else alts []
-
-  identifier :: Par String
+  identifier :: Par Identifier
   identifier = do
-    x <- alpha
-    xs <- many (alts [alpha,digit,sat (=='_')])
-    pure (x:xs)
+    pos <- position
+    name <- identifierName
+    pure (Identifier { pos, name} )
 
+  unterminated_string = do
+    satisfy $ \case TokUnterminatedString{} -> Just (); _ -> Nothing
+    reject "Unterminated string"
+
+  numberLit :: Par Double
+  numberLit = nibble $ satisfy $ \case TokNumber s -> Just (read s); _ -> Nothing
+
+  stringLit :: Par String
+  stringLit = nibble $ satisfy $ \case TokString s -> Just s; _ -> Nothing
+
+  sym,key :: String -> Par ()
+
+  sym want = nibble $ satisfy $ \case TokSym got | got==want -> Just (); _ -> Nothing
+  key want = nibble $ satisfy $ \case TokKeyword got | got==want -> Just (); _ -> Nothing
+
+  identifierName = nibble $ satisfy $ \case TokIdentifier s -> Just s; _ -> Nothing
+
+  nibble :: Par a -> Par a
   nibble par = do
     x <- par
     whitespace
     pure x
 
-  whitespace = skip (alts [white1, commentToEol])
+  whitespace :: Par ()
+  whitespace = skip (alts [white, commentToEol])
+    where
+        skip :: Par () -> Par ()
+        skip p = do _ <- many p; return ()
 
-  white1 = alts [lit ' ', lit '\n', lit '\t']
+        commentToEol :: Par ()
+        commentToEol = satisfy $ \case TokComment{} -> Just (); _ -> Nothing
 
-  commentToEol :: Par ()
-  commentToEol = do
-    noError (do lit '/'; lit '/')
-    skip notNL
+  white = nibble $ satisfy $ \case TokWhite{} -> Just (); _ -> Nothing
 
-  skip p = do _ <- many p; return ()
+data Tok
+  = TokIdentifier String
+  | TokString String
+  | TokUnterminatedString String
+  | TokKeyword String
+  | TokSym String
+  | TokNumber String
+  | TokOtherChar Char
+  | TokComment String
+  | TokWhite String
+  deriving Eq
 
-  notNL = do
-    _ <- sat (\case '\n' -> False; _ -> True)
-    pure ()
+instance Show Tok where show = charsOfTok
 
-  alpha = sat Char.isAlpha
-  digit = sat Char.isDigit
-  next = sat (const True)
+charsOfTok :: Tok -> String
+charsOfTok = \case
+  TokIdentifier s -> s
+  TokString s -> printf "\"%s\"" s
+  TokUnterminatedString s -> printf "\"%s" s
+  TokKeyword s -> s
+  TokSym s -> s
+  TokNumber s -> s
+  TokOtherChar c -> [c]
+  TokWhite s -> s
+  TokComment s -> "//"++s
+
+tickPos :: Pos -> Tok -> Pos -- TODO: change interface so pos is updated direct by scaTok
+tickPos pos = \case
+  tok -> foldl Pos.tickPos pos (charsOfTok tok)
+
+keywords :: [String]
+keywords =
+  [ "and"
+  , "class"
+  , "else"
+  , "false"
+  , "for"
+  , "fun"
+  , "if"
+  , "nil"
+  , "or"
+  , "print"
+  , "return"
+  , "super"
+  , "this"
+  , "true"
+  , "var"
+  , "while"
+  ]
+
+scanTok :: Text -> Maybe (Tok,Text)
+scanTok t0 =
+  case Text.uncons t0 of
+    Nothing -> Nothing
+    Just (c,t1) ->
+      case c of
+        '{' -> Just (TokSym [c],t1)
+        '}' -> Just (TokSym [c],t1)
+        '(' -> Just (TokSym [c],t1)
+        ')' -> Just (TokSym [c],t1)
+        ';' -> Just (TokSym [c],t1)
+        '+' -> Just (TokSym [c],t1)
+        '-' -> Just (TokSym [c],t1)
+        '*' -> Just (TokSym [c],t1)
+        ',' -> Just (TokSym [c],t1)
+        '.' -> Just (TokSym [c],t1)
+
+        '!' ->
+          case Text.uncons t1 of
+            Just ('=',t2) -> Just (TokSym "!=",t2)
+            _ -> Just (TokSym "!",t1)
+
+        '/' ->
+          case Text.uncons t1 of
+            Just ('/',t2) -> Just (loopCommentToEOL [] t2)
+            _ -> Just (TokSym "/",t1)
+
+        '"' -> Just (loopString [] t1)
+
+        _ | Char.isSpace c    -> Just $ loopWhite [c] t1
+        _ | Char.isDigit c    -> Just $ loopNumber [c] t1
+        _ | Char.isAlpha c    -> Just $ loopIdentOrKeyword [c] t1
+        _ | isSymChar c       -> Just $ loopSym [c] t1
+
+        _ ->
+          Just (TokOtherChar c, t1)
+
+  where
+    loopCommentToEOL :: [Char] -> Text -> (Tok,Text)
+    loopCommentToEOL acc text =
+      case Text.uncons text of
+        Just (c,text) | c/='\n' -> loopCommentToEOL (c:acc) text
+        _ -> (TokComment (reverse acc), text)
+
+    loopWhite :: [Char] -> Text -> (Tok,Text)
+    loopWhite acc text =
+      case Text.uncons text of
+        Just (c,text) | Char.isSpace c -> loopWhite (c:acc) text
+        _ -> (TokWhite (reverse acc),text)
+
+    loopNumber :: [Char] -> Text -> (Tok,Text)
+    loopNumber acc text0 =
+      case Text.uncons text0 of
+        Just (c,text) | Char.isDigit c -> loopNumber (c:acc) text
+        Just ('.',text) ->
+          case Text.uncons text of
+            Just (c,text) | Char.isDigit c -> loopAfterPoint (c:'.':acc) text
+            _ ->
+              (TokNumber (reverse acc),text0)
+        _ ->
+          (TokNumber (reverse acc),text0)
+
+    loopAfterPoint :: [Char] -> Text -> (Tok,Text)
+    loopAfterPoint acc text =
+      case Text.uncons text of
+        Just (c,text) | Char.isDigit c -> loopAfterPoint (c:acc) text
+        _ ->
+          (TokNumber (reverse acc),text)
+
+    loopString :: [Char] -> Text -> (Tok,Text)
+    loopString acc text =
+      case Text.uncons text of
+        Just ('"',text) -> (TokString (reverse acc), text)
+        Just (c,text) -> loopString (c:acc) text
+        Nothing -> (TokUnterminatedString (reverse acc),text)
+
+    loopIdentOrKeyword :: [Char] -> Text -> (Tok,Text)
+    loopIdentOrKeyword acc text =
+      case Text.uncons text of
+        Just (c,text) | isIdent c -> loopIdentOrKeyword (c:acc) text
+        _ -> do
+          let s = reverse acc
+          let tok = if s `elem` keywords then TokKeyword s else TokIdentifier s
+          (tok,text)
+
+    isIdent c = Char.isAlpha c || Char.isDigit c || c == '_'
+
+    loopSym :: [Char] -> Text -> (Tok,Text)
+    loopSym acc text =
+      case Text.uncons text of
+        Just (c,text) | isSymChar c -> loopSym (c:acc) text
+        _ -> (TokSym (reverse acc),text)
+
+    isSymChar c = c `elem` "=<>"
