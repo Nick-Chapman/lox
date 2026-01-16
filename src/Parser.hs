@@ -17,23 +17,23 @@ tryParse :: Text -> Either String [Stat]
 tryParse = either (Left . formatError) Right . Par4.runParser Par4.Config
   { start
   , initPos
-  , tickPos
-  , scanTok
+  , scanner
   }
 
 formatError :: (Pos,Text,Maybe String) -> String
 formatError (pos,text,opt) = do
   case opt of
     Nothing -> do
-      let tok = case scanTok text of Nothing -> "EOF"; Just (x,_) -> show x
+      let tok = case scanner pos text of Nothing -> "EOF"; Just (x,_,_) -> show x
       printf "%s Error: Unexpected '%s'." (showPos pos) tok
 
     -- No "at end"
     Just (mes@"Unterminated string") -> printf "%s Error: %s." (showPos pos) mes
 
     Just mes -> do
-      let tok = case scanTok text of Nothing -> "end"; Just (x,_) -> printf "'%s'" (show x)
+      let tok = case scanner pos text of Nothing -> "end"; Just (x,_,_) -> printf "'%s'" (show x)
       printf "%s Error at %s: %s"(showPos pos) tok mes
+
 
 start :: Par [Stat]
 start = program where
@@ -361,6 +361,9 @@ start = program where
 
   white = nibble $ satisfy $ \case TokWhite{} -> Just (); _ -> Nothing
 
+----------------------------------------------------------------------
+-- token
+
 data Tok
   = TokIdentifier String
   | TokString String
@@ -373,23 +376,34 @@ data Tok
   | TokWhite String
   deriving Eq
 
-instance Show Tok where show = charsOfTok
+instance Show Tok where
+  show = \case
+    TokIdentifier s -> s
+    TokString s -> printf "\"%s\"" s
+    TokUnterminatedString s -> printf "\"%s" s
+    TokKeyword s -> s
+    TokSym s -> s
+    TokNumber s -> s
+    TokOtherChar c -> [c]
+    TokWhite s -> s
+    TokComment s -> "//"++s
 
-charsOfTok :: Tok -> String
-charsOfTok = \case
-  TokIdentifier s -> s
-  TokString s -> printf "\"%s\"" s
-  TokUnterminatedString s -> printf "\"%s" s
-  TokKeyword s -> s
-  TokSym s -> s
-  TokNumber s -> s
-  TokOtherChar c -> [c]
-  TokWhite s -> s
-  TokComment s -> "//"++s
+----------------------------------------------------------------------
+-- scanner...
 
-tickPos :: Pos -> Tok -> Pos -- TODO: change interface so pos is updated direct by scaTok
-tickPos pos = \case
-  tok -> foldl Pos.tickPos pos (charsOfTok tok)
+data TP = XTP Text Pos
+
+scanner :: Pos -> Text -> Maybe (Tok,Pos,Text)
+scanner pos text =
+  case scanTok (XTP text pos) of
+    Nothing -> Nothing
+    Just (tok,XTP text pos) -> Just (tok, pos, text)
+
+uncons :: TP -> Maybe (Char,TP)
+uncons (XTP text pos) =
+  case Text.uncons text of
+    Nothing -> Nothing
+    Just (c,text) -> Just (c,XTP text (Pos.tickPos pos c))
 
 keywords :: [String]
 keywords =
@@ -411,9 +425,9 @@ keywords =
   , "while"
   ]
 
-scanTok :: Text -> Maybe (Tok,Text)
+scanTok :: TP -> Maybe (Tok,TP)
 scanTok t0 =
-  case Text.uncons t0 of
+  case uncons t0 of
     Nothing -> Nothing
     Just (c,t1) ->
       case c of
@@ -429,12 +443,12 @@ scanTok t0 =
         '.' -> Just (TokSym [c],t1)
 
         '!' ->
-          case Text.uncons t1 of
+          case uncons t1 of
             Just ('=',t2) -> Just (TokSym "!=",t2)
             _ -> Just (TokSym "!",t1)
 
         '/' ->
-          case Text.uncons t1 of
+          case uncons t1 of
             Just ('/',t2) -> Just (loopCommentToEOL [] t2)
             _ -> Just (TokSym "/",t1)
 
@@ -449,47 +463,47 @@ scanTok t0 =
           Just (TokOtherChar c, t1)
 
   where
-    loopCommentToEOL :: [Char] -> Text -> (Tok,Text)
+    loopCommentToEOL :: [Char] -> TP -> (Tok,TP)
     loopCommentToEOL acc text =
-      case Text.uncons text of
+      case uncons text of
         Just (c,text) | c/='\n' -> loopCommentToEOL (c:acc) text
         _ -> (TokComment (reverse acc), text)
 
-    loopWhite :: [Char] -> Text -> (Tok,Text)
+    loopWhite :: [Char] -> TP -> (Tok,TP)
     loopWhite acc text =
-      case Text.uncons text of
+      case uncons text of
         Just (c,text) | Char.isSpace c -> loopWhite (c:acc) text
         _ -> (TokWhite (reverse acc),text)
 
-    loopNumber :: [Char] -> Text -> (Tok,Text)
+    loopNumber :: [Char] -> TP -> (Tok,TP)
     loopNumber acc text0 =
-      case Text.uncons text0 of
+      case uncons text0 of
         Just (c,text) | Char.isDigit c -> loopNumber (c:acc) text
         Just ('.',text) ->
-          case Text.uncons text of
+          case uncons text of
             Just (c,text) | Char.isDigit c -> loopAfterPoint (c:'.':acc) text
             _ ->
               (TokNumber (reverse acc),text0)
         _ ->
           (TokNumber (reverse acc),text0)
 
-    loopAfterPoint :: [Char] -> Text -> (Tok,Text)
+    loopAfterPoint :: [Char] -> TP -> (Tok,TP)
     loopAfterPoint acc text =
-      case Text.uncons text of
+      case uncons text of
         Just (c,text) | Char.isDigit c -> loopAfterPoint (c:acc) text
         _ ->
           (TokNumber (reverse acc),text)
 
-    loopString :: [Char] -> Text -> (Tok,Text)
+    loopString :: [Char] -> TP -> (Tok,TP)
     loopString acc text =
-      case Text.uncons text of
+      case uncons text of
         Just ('"',text) -> (TokString (reverse acc), text)
         Just (c,text) -> loopString (c:acc) text
         Nothing -> (TokUnterminatedString (reverse acc),text)
 
-    loopIdentOrKeyword :: [Char] -> Text -> (Tok,Text)
+    loopIdentOrKeyword :: [Char] -> TP -> (Tok,TP)
     loopIdentOrKeyword acc text =
-      case Text.uncons text of
+      case uncons text of
         Just (c,text) | isIdent c -> loopIdentOrKeyword (c:acc) text
         _ -> do
           let s = reverse acc
@@ -498,9 +512,9 @@ scanTok t0 =
 
     isIdent c = Char.isAlpha c || Char.isDigit c || c == '_'
 
-    loopSym :: [Char] -> Text -> (Tok,Text)
+    loopSym :: [Char] -> TP -> (Tok,TP)
     loopSym acc text =
-      case Text.uncons text of
+      case uncons text of
         Just (c,text) | isSymChar c -> loopSym (c:acc) text
         _ -> (TokSym (reverse acc),text)
 

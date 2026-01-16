@@ -12,8 +12,7 @@ data Config pos tok a where
   Config ::
     { start :: Par pos tok a
     , initPos :: pos
-    , tickPos :: pos -> tok -> pos
-    , scanTok :: Text -> Maybe (tok,Text)
+    , scanner :: pos -> Text -> Maybe (tok,pos,Text)
     } -> Config pos tok a
 
 alts :: [Par pos tok a] -> Par pos tok a
@@ -57,7 +56,7 @@ data K4 pos a b = K4
 type Res pos a = Either (pos,Text,Maybe String) a
 
 runParser :: forall pos tok a. Config pos tok a -> Text -> Res pos a
-runParser Config{start,initPos,tickPos,scanTok} text0 =
+runParser Config{start,initPos,scanner} text0 =
   run initPos text0 start finish
   where
 
@@ -72,7 +71,7 @@ runParser Config{start,initPos,tickPos,scanTok} text0 =
         nope :: pos -> Text -> Maybe String -> Res pos a
         nope pos text mes = Left (pos, text, mes)
         yes pos text a =
-          case scanTok text of
+          case scanner pos text of
             Nothing -> Right a
             Just{} -> nope pos text Nothing
 
@@ -85,16 +84,17 @@ runParser Config{start,initPos,tickPos,scanTok} text0 =
       Ret x -> eps x
 
       Fail -> fail Nothing
+
       Expect mes -> fail (Just mes)
 
       Reject mes -> rej (Just mes)
 
       Satisfy pred -> do
-        case scanTok t of
+        case scanner p t of
           Nothing -> fail Nothing
-          Just (c,t) ->
+          Just (c,p,t) ->
             case pred c of
-              Just a -> succ (tickPos p c) t a
+              Just a -> succ p t a
               Nothing -> fail Nothing
 
       NoError par -> do
