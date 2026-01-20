@@ -147,23 +147,16 @@ data Asm a where
 type Res = Either (Pos,String) Code
 
 runAsm :: Asm () -> Res
-runAsm m = loop (State [] []) m k0
+runAsm m = finish <$> loop 0 0 m
   where
-    k0  () State{cs,ops} = Right $ Code { constants = reverse cs, chunk = reverse ops }
-
-    loop :: State -> Asm a -> (a -> State -> Res) -> Res
-    loop s = \case
-      Ret a -> \k -> k a s
-      Bind m f -> \k -> loop s m $ \a s -> loop s (f a) k
-      Emit op -> \k -> do
-        let State{ops} = s
-        k () s { ops = op : ops }
-      EmitConst c -> \k -> do
-        let State{cs} = s
-        let i = length cs
-        if i > 255 then error "too many constants" else do
-          k (fromIntegral i) s { cs = c : cs }
-      Error pos mes -> \_ignoredK -> do
-        Left (pos,mes)
-
-data State = State { cs :: [Const], ops :: [Op] }
+    finish ((),constants,chunk) = Code { constants, chunk }
+    loop :: Word8 -> Int -> Asm a -> Either (Pos,String) (a,[Const],[Op])
+    loop i q = \case
+      Ret a -> Right (a,[],[])
+      Bind m f ->
+        loop i q m >>= \(a,cs1,ops1) -> do
+        loop (i + fromIntegral (length cs1)) (q + length ops1) (f a) >>= \(b,cs2,ops2) -> do
+          Right (b,cs1++cs2,ops1++ops2)
+      Emit op -> Right ((),[],[op])
+      EmitConst c -> Right (i,[c],[])
+      Error pos mes -> Left (pos,mes)
