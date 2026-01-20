@@ -1,5 +1,6 @@
-module VM (Code(..),Const(..), runCode) where
+module VM (runCode) where
 
+import Code (Code(..),Const(..))
 import Control.Monad (ap,liftM)
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -9,14 +10,6 @@ import OP qualified
 import Pos (Pos,initPos)
 import Runtime (Eff(Print))
 import Value (Value(..),binary,vadd,isTruthy,vnegate,vequal)
-
-data Code = Code
-  { constants :: [Const]
-  , chunk :: [Op]
-  }
-
-data Const = ConstNumber Double | ConstString String
-  deriving Show
 
 pos0 :: Pos -- TODO: avoid dummy hack
 pos0 = initPos

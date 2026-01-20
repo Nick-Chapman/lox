@@ -3,27 +3,25 @@ module OP(Op(..)) where
 import Data.Word (Word8)
 
 data Op
-  = CONSTANT
-  | NIL
-  | TRUE
-  | FALSE
-  | POP
-  | GET_LOCAL
-  | SET_LOCAL
-  | EQUAL
-  | GREATER
-  | LESS
-  | ADD
-  | SUBTRACT
-  | MULTIPLY
+  = ADD
+  | CONSTANT
   | DIVIDE
-  | NOT
-  | NEGATE
-  | PRINT
-
-  -- forward or backward
+  | EQUAL
+  | FALSE
+  | GET_LOCAL
+  | GREATER
   | JUMP
   | JUMP_IF_FALSE
+  | LESS
+  | MULTIPLY
+  | NEGATE
+  | NIL
+  | NOT
+  | POP
+  | PRINT
+  | SET_LOCAL
+  | SUBTRACT
+  | TRUE
 
   | ARG Word8
   deriving Show

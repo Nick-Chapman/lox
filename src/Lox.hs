@@ -1,16 +1,18 @@
 module Lox (main) where
 
 import Ast (Stat)
-import Compiler qualified (executeTopDecls)
+import Code qualified (export)
+import Compiler qualified (compile)
 import Data.Text qualified as Text
 import Interpreter qualified (executeTopDecls)
 import Parser qualified (tryParse)
 import Resolver qualified (resolveTop)
-import Runtime (Eff,runEffect)
+import Runtime (Eff(Error,Print),runEffect)
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..),exitWith)
 import System.IO (stdout,stderr,hFlush,hPutStrLn,hSetBinaryMode)
 import System.IO.Binary (readBinaryFile)
+import VM (runCode)
 
 main :: IO ()
 main = do
@@ -36,23 +38,35 @@ main = do
 
 
 interpret :: Mode -> [Stat] -> Eff ()
-interpret mode stats =
+interpret mode decls =
   case mode of
-    ModeTree -> do _ <- Interpreter.executeTopDecls stats; pure ()
-    ModeBCI -> Compiler.executeTopDecls stats
+    ModeTree -> do _ <- Interpreter.executeTopDecls decls; pure ()
+    ModeBCI -> do
+      case Compiler.compile decls of
+        Left (pos,mes) -> Runtime.Error pos mes
+        Right code -> do
+          runCode code
+    ModeExport -> do
+      case Compiler.compile decls of
+        Left (pos,mes) -> Runtime.Error pos mes
+        Right code -> do
+          let str = Code.export code
+          Runtime.Print str
 
-data Mode = ModeTree | ModeBCI
+
+data Mode = ModeTree | ModeBCI | ModeExport
 
 data Config = Config { files :: [String], mode :: Mode }
 
 parseArgs :: [String] -> Config
 parseArgs = loop Config { files = [], mode = defaultMode }
   where
-    defaultMode = ModeTree
+    defaultMode = ModeBCI
     loop acc = \case
       [] -> acc
       "-tree":xs -> loop acc { mode = ModeTree } xs
       "-bci":xs -> loop acc { mode = ModeBCI } xs
+      "-export":xs -> loop acc { mode = ModeExport } xs
       flag@('-':_):_ -> error ("unknown flag: " ++ flag)
       file:xs -> loop acc { files = file : files acc } xs
 

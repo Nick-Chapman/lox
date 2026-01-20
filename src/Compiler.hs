@@ -1,6 +1,7 @@
-module Compiler (executeTopDecls) where
+module Compiler (compile) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Code (Code(..),Const(..))
 import Control.Monad (ap,liftM)
 import Control.Monad.Fix (MonadFix,mfix)
 import Data.Map (Map)
@@ -9,27 +10,10 @@ import Data.Word (Word8)
 import OP (Op)
 import OP qualified
 import Pos (Pos)
-import Runtime (Eff(Print))
-import Runtime qualified (Eff(Error))
 import Text.Printf (printf)
-import VM (Code(..),runCode, Const(..))
 
-executeTopDecls :: [Stat] -> Eff ()
-executeTopDecls decls = do
-  case runAsm (compStats env0 decls) of
-    Left (pos,mes) -> Runtime.Error pos mes
-    Right code -> do
-      if doDump then _dumpBC code else pure ()
-      --Print "execute..."
-      runCode code
-        where doDump = False
-
-_dumpBC :: Code -> Eff ()
-_dumpBC Code{constants,chunk=ops} = do
-  Print "constants..."
-  mapM_ (Print . show) constants
-  Print "ops..."
-  mapM_ (Print . show) ops
+compile :: [Stat] -> Either (Pos,String) Code
+compile decls = runAsm (compStats env0 decls)
 
 data Env = Env { d :: Word8, m :: Map String Word8 }
 

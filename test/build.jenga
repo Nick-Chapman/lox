@@ -21,9 +21,11 @@ groups:
 fullpath.list: @chapters
   cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|~/other/craftinginterpreters/|' > $out
   #echo ./lambda.lox >> $out #  +1 = 240
+  echo ./fib-iter.lox >> $out #  +1 = 240
 
 
 lambda.lox : ../examples/lambda.lox :
+fib-iter.lox : ../examples/fib-iter.lox :
 
 
 args-for-exe-under-test:
