@@ -20,9 +20,10 @@ data Op
   | NOT
   | NEGATE
   | PRINT
-  | ARG Word8
 
-  -- TODO: change it to 24bit in 3 following byte args
-  | JUMP Int --forward or backward
-  | JUMP_IF_FALSE Int
+  -- forward or backward
+  | JUMP
+  | JUMP_IF_FALSE
+
+  | ARG Word8
   deriving Show

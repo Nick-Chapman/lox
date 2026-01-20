@@ -86,12 +86,14 @@ dispatch = \case
     v <- Pop
     Effect (Runtime.Print (show v))
 
-  OP.JUMP i -> do
-    ModIP (+i)
+  OP.JUMP -> do
+    i <- FetchArg
+    ModIP (+ (fromIntegral i - 128))
 
-  OP.JUMP_IF_FALSE i -> do
+  OP.JUMP_IF_FALSE -> do
+    i <- FetchArg
     v <- Peek
-    if isTruthy v then pure () else ModIP (+i)
+    if isTruthy v then pure () else ModIP (+ (fromIntegral i - 128))
 
   OP.ARG{} ->
     error "dispatch/OP_ARG"

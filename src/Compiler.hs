@@ -183,16 +183,22 @@ compStatThen env = \case
       EGetProp{} -> undefined
       ESetProp{} -> undefined
 
-relativize :: (Int -> Op) -> Int -> Asm ()
-relativize op a = do
-  b <- Here
-  Emit (op (a - b - 1)) -- TODO: revist then op has 3x byte args
 
 jump :: Int -> Asm ()
-jump = relativize OP.JUMP
+jump i = do Emit OP.JUMP; relativize i
 
 jumpIfFalse :: Int -> Asm ()
-jumpIfFalse = relativize OP.JUMP_IF_FALSE
+jumpIfFalse i = do Emit OP.JUMP_IF_FALSE; relativize i
+
+relativize :: Int -> Asm ()
+relativize a = do
+  b <- Here
+  let dist = a - b - 1
+  Emit $
+    if dist > 127 then error "jump too far forward" else do
+      if dist < -128 then error "jump too far backward" else do
+        let u = dist + 128 -- 0..255
+        OP.ARG (fromIntegral u)
 
 instance Functor Asm where fmap = liftM
 instance Applicative Asm where pure = Ret; (<*>) = ap
