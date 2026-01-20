@@ -23,8 +23,10 @@ fullpath.list: @chapters
 
 lambda.lox : ../examples/lambda.lox :
 
+args-for-exe-under-test:
+  echo '-bci' > $out
 
-rules : fullpath.list rules.sh
+rules : fullpath.list rules.sh args-for-exe-under-test
   ./rules.sh < $in > $out
 
 include rules
