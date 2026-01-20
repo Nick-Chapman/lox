@@ -10,7 +10,7 @@ import Pos (Pos)
 import Runtime (Eff(Print))
 import Runtime qualified (Eff(Error))
 import Text.Printf (printf)
-import VM (Code(..),runCode)
+import VM (Code(..),runCode, Const(..))
 
 executeTopDecls :: [Stat] -> Eff ()
 executeTopDecls decls = do
@@ -22,15 +22,13 @@ executeTopDecls decls = do
       runCode code
 
 _dumpBC :: Code -> Eff ()
-_dumpBC Code{chunk,numbers,strings} = do
-  Print "numbers..."
-  mapM_ (Print . show) numbers
-  Print "strings..."
-  mapM_ (Print . show) strings
+_dumpBC Code{constants,chunk=ops} = do
+  Print "constants..."
+  mapM_ (Print . show) constants
   Print "ops..."
-  mapM_ (Print . show) chunk
+  mapM_ (Print . show) ops
 
-data Env = Env { d :: Int, m :: Map String Int } --deriving Show
+data Env = Env { d :: Int, m :: Map String Int }
 
 env0 :: Env
 env0 = Env { d = 0, m = Map.empty }
@@ -84,13 +82,13 @@ compileExp env = comp
     comp = \case
       ELit lit -> case lit of
         LNumber n -> do
-          i <- EmitConstNum n
-          Emit (OP.CONSTANT_NUM i)
+          c <- EmitConst (ConstNumber n)
+          Emit (OP.CONSTANT c)
         LNil{} -> Emit OP.NIL
         LBool b -> Emit (if b then OP.TRUE else OP.FALSE)
         LString str -> do
-          i <- EmitConstString str
-          Emit (OP.CONSTANT_STR i)
+          c <- EmitConst (ConstString str)
+          Emit (OP.CONSTANT c)
       EBinary _ e1 op e2 -> do
         comp e1
         comp e2
@@ -134,16 +132,15 @@ data Asm a where
   Ret :: a -> Asm a
   Bind :: Asm a -> (a -> Asm b) -> Asm b
   Emit :: Op -> Asm ()
-  EmitConstNum :: Double -> Asm Int
-  EmitConstString :: String -> Asm Int
+  EmitConst :: Const -> Asm Int
   Error :: Pos -> String -> Asm a
 
 type Res = Either (Pos,String) Code
 
 runAsm :: Asm () -> Res
-runAsm m = loop (State [] [] []) m k0
+runAsm m = loop (State [] []) m k0
   where
-    k0  () State{ns,ss,ops} = Right $ Code { chunk = reverse ops, numbers = reverse ns, strings = reverse ss }
+    k0  () State{cs,ops} = Right $ Code { constants = reverse cs, chunk = reverse ops }
 
     loop :: State -> Asm a -> (a -> State -> Res) -> Res
     loop s = \case
@@ -152,15 +149,11 @@ runAsm m = loop (State [] [] []) m k0
       Emit op -> \k -> do
         let State{ops} = s
         k () s { ops = op : ops }
-      EmitConstNum n -> \k -> do
-        let State{ns} = s
-        let i = length ns
-        k i s { ns = n : ns }
-      EmitConstString str -> \k -> do
-        let State{ss} = s
-        let i = length ss
-        k i s { ss = str : ss }
+      EmitConst c -> \k -> do
+        let State{cs} = s
+        let i = length cs
+        k i s { cs = c : cs }
       Error pos mes -> \_ignoredK -> do
         Left (pos,mes)
 
-data State = State { ns :: [Double], ss :: [String], ops :: [Op] }
+data State = State { cs :: [Const], ops :: [Op] }

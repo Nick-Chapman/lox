@@ -1,4 +1,4 @@
-module VM (Code(..),Op(..),runCode) where
+module VM (Code(..),Const(..), runCode) where
 
 import Control.Monad (ap,liftM)
 import Data.Map (Map)
@@ -11,16 +11,18 @@ import Runtime qualified (Eff(Print))
 import Value (Value(..),binary,vadd,isTruthy,vnegate,vequal)
 
 data Code = Code
-  { chunk :: [Op]
-  , numbers :: [Double]
-  , strings :: [String]
+  { constants :: [Const]
+  , chunk :: [Op]
   }
+
+data Const = ConstNumber Double | ConstString String
+  deriving Show
 
 pos0 :: Pos -- TODO: avoid dummy hack
 pos0 = initPos
 
 runCode :: Code -> Eff ()
-runCode Code{chunk=ops,numbers,strings} = runVM (execOps ops)
+runCode Code{constants,chunk=ops} = runVM (execOps ops)
 
   where
     execOps :: [Op] -> VM ()
@@ -28,8 +30,10 @@ runCode Code{chunk=ops,numbers,strings} = runVM (execOps ops)
 
     execOp :: Op -> VM ()
     execOp = \case
-      OP.CONSTANT_NUM i -> Push (VNumber (numbers !! i))
-      OP.CONSTANT_STR i -> Push (VString (strings !! i))
+      OP.CONSTANT i ->
+        Push $ case constants !! i of
+                 ConstNumber str -> VNumber str
+                 ConstString str -> VString str
 
       OP.NIL -> Push VNil
       OP.TRUE -> Push (VBool True)

@@ -1,8 +1,7 @@
 module OP(Op(..)) where
 
 data Op
-  = CONSTANT_NUM Int
-  | CONSTANT_STR Int -- TODO: avoid stratification on constant type
+  = CONSTANT Int
   | NIL
   | TRUE
   | FALSE
