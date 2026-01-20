@@ -6,7 +6,8 @@ import Pos (Pos)
 import Runtime (Eff(NewRef,ReadRef,WriteRef),Ref)
 import Runtime qualified (Eff(..))
 import Text.Printf (printf)
-import Value (Value(..),Env(..),Closure(..),Method(..),BoundMethod(..),ClassValue(..),InstanceValue(..),vequal,isTruthy)
+import Value (Value(..),Env(..),Closure(..),Method(..),BoundMethod(..),ClassValue(..),InstanceValue(..)
+             ,vequal,isTruthy,binary,vadd,vnegate)
 
 emptyEnv :: Env
 emptyEnv = Env Map.empty
@@ -258,11 +259,6 @@ evalOp2 pos v1 v2 = \case
   LessEqual -> VBool <$> binary pos (<=) v1 v2
   Greater -> VBool <$> binary pos (>) v1 v2
   GreaterEqual -> VBool <$> binary pos (>=) v1 v2
-  where
-  binary pos f v1 v2 = do
-    n1 <- asNumber pos "Operands must be numbers." v1
-    n2 <- asNumber pos "Operands must be numbers." v2
-    pure (f n1 n2)
 
 asFunction :: Value -> Env -> Pos -> [Value] -> Eff Value
 asFunction func globals pos args = case func of
@@ -283,19 +279,3 @@ checkArity :: Pos -> Int -> Int -> Eff ()
 checkArity pos nformals nargs =
   if nformals == nargs then pure () else
     Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
-
-vnegate :: Pos -> Value -> Eff Value
-vnegate pos v1 = do
-  n1 <- asNumber pos "Operand must be a number." v1
-  pure (VNumber (negate n1))
-
-asNumber :: Pos -> String -> Value -> Eff Double
-asNumber pos message = \case
-  VNumber n -> pure n
-  _ -> Runtime.Error pos message
-
-vadd :: Pos -> (Value,Value) -> Eff Value
-vadd pos = \case
-  (VNumber n1, VNumber n2) -> pure (VNumber (n1 + n2))
-  (VString s1, VString s2) -> pure (VString (s1 ++ s2))
-  _ -> Runtime.Error pos "Operands must be two numbers or two strings."

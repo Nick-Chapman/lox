@@ -1,9 +1,13 @@
-module Value (Value(..),Env(..),Closure(..),Method(..),BoundMethod(..),ClassValue(..),InstanceValue(..),isTruthy,vequal) where
+module Value
+  ( Value(..),Env(..),Closure(..),Method(..),BoundMethod(..),ClassValue(..),InstanceValue(..)
+  , isTruthy,vequal,asNumber,binary,vadd,vnegate
+  ) where
 
 import Data.List (isSuffixOf)
 import Data.Map (Map)
 import Pos (Pos)
 import Runtime (Eff,Ref)
+import Runtime qualified (Eff(Error))
 import Text.Printf (printf)
 
 data Env = Env (Map String (Ref Value))
@@ -64,3 +68,26 @@ vequal v1 v2 = case (v1,v2) of
   (VBoundMethod BoundMethod{identity=r1}, VBoundMethod BoundMethod{identity=r2}) -> (r1 == r2)
   (VClass ClassValue{classIdentity=r1}, VClass ClassValue{classIdentity=r2}) -> (r1 == r2)
   _ -> False
+
+
+asNumber :: Pos -> String -> Value -> Eff Double
+asNumber pos message = \case
+  VNumber n -> pure n
+  _ -> Runtime.Error pos message
+
+binary :: Pos -> (Double -> Double -> a) -> Value -> Value -> Eff a
+binary pos f v1 v2 = do
+  n1 <- asNumber pos "Operands must be numbers." v1
+  n2 <- asNumber pos "Operands must be numbers." v2
+  pure (f n1 n2)
+
+vadd :: Pos -> (Value,Value) -> Eff Value
+vadd pos = \case
+  (VNumber n1, VNumber n2) -> pure (VNumber (n1 + n2))
+  (VString s1, VString s2) -> pure (VString (s1 ++ s2))
+  _ -> Runtime.Error pos "Operands must be two numbers or two strings."
+
+vnegate :: Pos -> Value -> Eff Value
+vnegate pos v1 = do
+  n1 <- asNumber pos "Operand must be a number." v1
+  pure (VNumber (negate n1))

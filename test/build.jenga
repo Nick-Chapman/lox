@@ -3,11 +3,11 @@
 
 chapters:
   echo chap8.list  >> $out  #        69
-  echo chap9.list  >> $out  # +27 =  96
-  echo chap10.list >> $out  # +43 = 139
-  echo chap11.list >> $out  #  +8 = 147
-  echo chap12.list >> $out  # +60 = 207
-  echo chap13.list >> $out  # +32 = 239
+  #echo chap9.list  >> $out  # +27 =  96
+  #echo chap10.list >> $out  # +43 = 139
+  #echo chap11.list >> $out  #  +8 = 147
+  #echo chap12.list >> $out  # +60 = 207
+  #echo chap13.list >> $out  # +32 = 239
 
 groups:
   echo parse-error.list          >> $out  #  40
@@ -17,9 +17,9 @@ groups:
                                           #-----
                                           # 239
 
-fullpath.list: @groups
+fullpath.list: @chapters
   cat *.list | grep -v '^$$' | grep -v ^# | sed 's|^|~/other/craftinginterpreters/|' > $out
-  echo ./lambda.lox >> $out #  +1 = 240
+  #echo ./lambda.lox >> $out #  +1 = 240
 
 lambda.lox : ../examples/lambda.lox :
 

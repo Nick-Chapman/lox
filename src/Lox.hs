@@ -2,6 +2,7 @@ module Lox (main) where
 
 import Data.Text qualified as Text
 import Interpreter qualified (executeTopDecls)
+import Compiler qualified (executeTopDecls)
 import Parser qualified (tryParse)
 import Resolver qualified (resolveTop)
 import Runtime (runEffect)
@@ -23,12 +24,15 @@ main = do
           case Resolver.resolveTop decls of
             errs@(_:_)-> abort 65 errs
             [] ->
-              Runtime.runEffect putOut (Interpreter.executeTopDecls decls) >>= \case
+              Runtime.runEffect putOut (_interpretBC decls) >>= \case
                 Right _globals' -> do
                   -- if/when support repl, we have the updated globals in hand
                   pure ()
                 Left err -> do
                   abort 70 [err]
+        where
+          _interpret = Interpreter.executeTopDecls
+          _interpretBC = Compiler.executeTopDecls
 
 abort :: Int -> [String] -> IO a
 abort code errs = do

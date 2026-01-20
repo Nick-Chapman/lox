@@ -56,8 +56,15 @@ xdepends:
   echo 'Ast.o : JustLine.hi' >> $@
   echo 'Value.o : JustLine.hi' >> $@
   echo 'Interpreter.o : JustLine.hi' >> $@
+  echo 'Compiler.o : VM.hi' >> $@
+  echo 'Compiler.o : JustLine.hi' >> $@
   echo 'Parser.o : JustLine.hi' >> $@
   echo 'Scanner.o : JustLine.hi' >> $@
   echo 'Resolver.o : JustLine.hi' >> $@
   echo 'Lox.o : JustLine.hi' >> $@
+  echo 'Lox.o : VM.hi' >> $@
   echo 'Runtime.o : JustLine.hi' >> $@
+  echo 'VM.o : JustLine.hi' >> $@
+  echo 'Compiler.o : Value.hi' >> $@
+  echo 'Compiler.o : OP.hi' >> $@
+  echo 'Lox.o : OP.hi' >> $@
