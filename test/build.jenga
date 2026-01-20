@@ -1,9 +1,7 @@
 
-# Tests are organized by chapter increments
-
 chapters:
   echo chap8.list  >> $out  #        69
-  #echo chap9.list  >> $out  # +27 =  96
+  echo chap9.list  >> $out  # +27 =  96
   #echo chap10.list >> $out  # +43 = 139
   #echo chap11.list >> $out  #  +8 = 147
   #echo chap12.list >> $out  # +60 = 207
@@ -17,14 +15,20 @@ groups:
                                           #-----
                                           # 239
 
+
+# Tests are organized by chapter increments, or logical groups
+
 fullpath.list: @chapters
-  cat *.list | grep -v '^$$' | grep -v ^# | sed 's|^|~/other/craftinginterpreters/|' > $out
+  cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|~/other/craftinginterpreters/|' > $out
   #echo ./lambda.lox >> $out #  +1 = 240
+
 
 lambda.lox : ../examples/lambda.lox :
 
+
 args-for-exe-under-test:
   echo '-bci' > $out
+
 
 rules : fullpath.list rules.sh args-for-exe-under-test
   ./rules.sh < $in > $out

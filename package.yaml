@@ -22,6 +22,7 @@ default-extensions:
 - LambdaCase
 - NamedFieldPuns
 - NumericUnderscores
+- RecursiveDo
 - ScopedTypeVariables
 
 ghc-options:

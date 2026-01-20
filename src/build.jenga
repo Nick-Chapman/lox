@@ -20,6 +20,8 @@ default-extensions:
   echo LambdaCase >> $@
   echo DuplicateRecordFields >> $@
   echo GADTs >> $@
+  echo RecursiveDo >> $@
+
 
 packages:
   echo clock >> $@

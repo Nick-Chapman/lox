@@ -2,8 +2,10 @@ module Compiler (executeTopDecls) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
 import Control.Monad (ap,liftM)
+import Control.Monad.Fix (MonadFix,mfix)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Word (Word8)
 import OP (Op)
 import OP qualified
 import Pos (Pos)
@@ -11,16 +13,16 @@ import Runtime (Eff(Print))
 import Runtime qualified (Eff(Error))
 import Text.Printf (printf)
 import VM (Code(..),runCode, Const(..))
-import Data.Word (Word8)
 
 executeTopDecls :: [Stat] -> Eff ()
 executeTopDecls decls = do
-  case runAsm (compileTopLevel decls) of
+  case runAsm (compStats env0 decls) of
     Left (pos,mes) -> Runtime.Error pos mes
     Right code -> do
-      -- _dumpBC code
+      if doDump then _dumpBC code else pure ()
       --Print "execute..."
       runCode code
+        where doDump = False
 
 _dumpBC :: Code -> Eff ()
 _dumpBC Code{constants,chunk=ops} = do
@@ -28,10 +30,6 @@ _dumpBC Code{constants,chunk=ops} = do
   mapM_ (Print . show) constants
   Print "ops..."
   mapM_ (Print . show) ops
-
-compileTopLevel :: [Stat] -> Asm ()
-compileTopLevel stats = do
-  compileStats env0 stats
 
 data Env = Env { d :: Word8, m :: Map String Word8 }
 
@@ -45,46 +43,77 @@ insertEnv name Env{d,m} =
 lookupEnv :: Pos -> String -> Env -> Asm Word8
 lookupEnv pos name Env{m} =
   maybe err pure $ Map.lookup name m
-  where err = Error pos (printf "Undefined variable '%s'." $ name)
+  where err = do Error pos (printf "Undefined variable '%s'." $ name); pure 0
 
-compileStats :: Env -> [Stat] -> Asm ()
-compileStats env = \case
+compStats :: Env -> [Stat] -> Asm ()
+compStats env = \case
   [] -> pure ()
   d1:ds -> do
-    compileStat env d1 $ \env ->
-      compileStats env ds
+    compStatThen env d1 $ \env ->
+      compStats env ds
 
-compileStat :: Env -> Stat -> (Env -> Asm ()) -> Asm ()
-compileStat env = comp
-  where
-    comp :: Stat -> (Env -> Asm ()) -> Asm ()
-    comp = \case
-      SPrint e -> \k -> do
-        compileExp env e
-        Emit OP.PRINT
-        k env
-      SExp e -> \k -> do
-        compileExp env e
-        Emit OP.POP
-        k env
-      SReturn{} -> do undefined
-      SBlock stats -> \k -> do
-        compileStats env stats
-        k env
-      SIf{} -> do undefined
-      SWhile{} -> do undefined
-      SFor{} -> do undefined
-      SVarDecl Identifier{name} e -> \k -> do
-        compileExp env e
-        k (insertEnv name env)
-        Emit OP.POP
-      SFunDecl{} -> do undefined
-      SClassDecl{} -> do undefined
+compStat :: Env -> Stat -> Asm ()
+compStat env stat =
+  compStatThen env stat $ \_ -> pure ()
 
-compileExp :: Env -> Exp -> Asm ()
-compileExp env = comp
+compStatThen :: Env -> Stat -> (Env -> Asm ()) -> Asm ()
+compStatThen env = \case
+
+  SPrint e -> \k -> do
+    compExp e
+    Emit OP.PRINT
+    k env
+
+  SExp e -> \k -> do
+    compExp e
+    Emit OP.POP
+    k env
+
+  SBlock stats -> \k -> do
+    compStats env stats
+    k env
+
+  SIf cond s1 s2 -> \k -> mdo
+    compExp cond
+    jumpIfFalse afterThen
+    compStat env s1
+    jump afterElse
+    afterThen <- Here
+    compStat env s2
+    afterElse <- Here
+    Emit OP.POP
+    k env
+
+  SWhile cond stat -> \k -> mdo
+    start <- Here
+    compExp cond
+    jumpIfFalse done
+    Emit OP.POP
+    compStat env stat
+    jump start
+    done <- Here
+    Emit OP.POP
+    k env
+
+  SFor (init,cond,update) body -> \k -> do
+    let deSugared = SBlock [ init , SWhile cond $ SBlock [body,update] ]
+    compStatThen env deSugared k
+
+  SVarDecl Identifier{name} e -> \k -> do
+    compExp e
+    k (insertEnv name env)
+    Emit OP.POP
+
+  SReturn{} -> do undefined
+  SFunDecl{} -> do undefined
+  SClassDecl{} -> do undefined
+
   where
-    comp = \case
+
+    compExp :: Exp -> Asm ()
+    compExp = \case
+      EGrouping e -> compExp e
+
       ELit lit -> case lit of
         LNumber n -> do
           i <- EmitConst (ConstNumber n)
@@ -96,9 +125,16 @@ compileExp env = comp
           i <- EmitConst (ConstString str)
           Emit OP.CONSTANT
           Emit (OP.ARG i)
+
+      EUnary _pos op e  -> do
+        compExp e
+        case op of
+          Negate -> Emit OP.NEGATE
+          Not -> Emit OP.NOT
+
       EBinary _ e1 op e2 -> do
-        comp e1
-        comp e2
+        compExp e1
+        compExp e2
         case op of
           Add -> Emit OP.ADD
           Sub -> Emit OP.SUBTRACT
@@ -110,53 +146,93 @@ compileExp env = comp
           LessEqual{} -> do Emit OP.GREATER; Emit OP.NOT
           Greater{} -> Emit OP.GREATER
           GreaterEqual{} -> do Emit OP.LESS; Emit OP.NOT
-      EGrouping e -> comp e
-      EUnary _pos op e  -> do
-        comp e
-        case op of
-          Negate -> Emit OP.NEGATE
-          Not -> Emit OP.NOT
+
       EVar Identifier{pos,name} -> do
         n <- lookupEnv pos name env
         Emit OP.GET_LOCAL
         Emit (OP.ARG n)
-      EThis{} -> undefined
+
       EAssign Identifier{pos,name} e -> do
         n <- lookupEnv pos name env
-        comp e
+        compExp e
         Emit OP.SET_LOCAL
         Emit (OP.ARG n)
-      ELogicalAnd{} -> undefined
-      ELogicalOr{} -> undefined
+
+      ELogicalAnd e1 e2 -> mdo
+        compExp e1
+        jumpIfFalse after
+        Emit OP.POP
+        compExp e2
+        after <- Here
+        pure ()
+
+      ELogicalOr e1 e2 -> mdo
+        compExp e1
+        jumpIfFalse beforeE2
+        jump end
+        beforeE2 <- Here
+        Emit OP.POP
+        compExp e2
+        end <- Here
+        pure ()
+
       ECall{} -> undefined
+
+      EThis{} -> undefined
       ESuperVar{} -> undefined
       EGetProp{} -> undefined
       ESetProp{} -> undefined
 
+relativize :: (Int -> Op) -> Int -> Asm ()
+relativize op a = do
+  b <- Here
+  Emit (op (a - b - 1)) -- TODO: revist then op has 3x byte args
+
+jump :: Int -> Asm ()
+jump = relativize OP.JUMP
+
+jumpIfFalse :: Int -> Asm ()
+jumpIfFalse = relativize OP.JUMP_IF_FALSE
+
 instance Functor Asm where fmap = liftM
 instance Applicative Asm where pure = Ret; (<*>) = ap
 instance Monad Asm where (>>=) = Bind
+instance MonadFix Asm where mfix = Fix
 
 data Asm a where
   Ret :: a -> Asm a
   Bind :: Asm a -> (a -> Asm b) -> Asm b
   Emit :: Op -> Asm ()
   EmitConst :: Const -> Asm Word8
-  Error :: Pos -> String -> Asm a
+  Error :: Pos -> String -> Asm ()
+  Here :: Asm Int
+  Fix :: (a -> Asm a) -> Asm a
 
 type Res = Either (Pos,String) Code
+type Err = (Pos,String)
 
 runAsm :: Asm () -> Res
-runAsm m = finish <$> loop 0 0 m
+runAsm m = finish (loop 0 0 m)
   where
-    finish ((),constants,chunk) = Code { constants, chunk }
-    loop :: Word8 -> Int -> Asm a -> Either (Pos,String) (a,[Const],[Op])
+    finish :: ((),[Const],[Op],[Err]) -> Res
+    finish ((),constants,chunk,errs) =
+      case errs of
+        [] -> Right $ Code { constants, chunk }
+        err:_ -> Left err
+
+    loop :: Word8 -> Int -> Asm a -> (a,[Const],[Op],[Err])
     loop i q = \case
-      Ret a -> Right (a,[],[])
+      Ret a -> (a,[],[],[])
       Bind m f ->
-        loop i q m >>= \(a,cs1,ops1) -> do
-        loop (i + fromIntegral (length cs1)) (q + length ops1) (f a) >>= \(b,cs2,ops2) -> do
-          Right (b,cs1++cs2,ops1++ops2)
-      Emit op -> Right ((),[],[op])
-      EmitConst c -> Right (i,[c],[])
-      Error pos mes -> Left (pos,mes)
+        case loop i q m of
+          (a,cs1,ops1,errs1) ->
+            case loop (i + fromIntegral (length cs1)) (q + length ops1) (f a) of
+              (b,cs2,ops2,errs2) ->
+                (b,cs1++cs2,ops1++ops2,errs1++errs2)
+      Emit op -> ((),[],[op],[])
+      EmitConst c -> (i,[c],[],[])
+      Error pos mes -> ((),[],[],[(pos,mes)])
+      Here -> (q,[],[],[])
+      Fix f -> do
+        let x@(a,_,_,_) = loop i q (f a)
+        x

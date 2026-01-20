@@ -52,7 +52,7 @@ dispatch = \case
 
   OP.SET_LOCAL -> do
     i <- FetchArg
-    v <- Pop; Push v -- peek
+    v <- Peek
     SetSlot i v
 
   OP.EQUAL -> do
@@ -86,6 +86,13 @@ dispatch = \case
     v <- Pop
     Effect (Runtime.Print (show v))
 
+  OP.JUMP i -> do
+    ModIP (+i)
+
+  OP.JUMP_IF_FALSE i -> do
+    v <- Peek
+    if isTruthy v then pure () else ModIP (+i)
+
   OP.ARG{} ->
     error "dispatch/OP_ARG"
 
@@ -106,11 +113,13 @@ data VM a where
   Effect :: Eff a -> VM a
   Push :: Value -> VM ()
   Pop :: VM Value
+  Peek :: VM Value
   GetSlot :: Word8 -> VM Value
   SetSlot :: Word8 -> Value -> VM ()
   GetConst :: Word8 -> VM Value
   Fetch :: VM (Maybe Op)
   FetchArg :: VM Word8
+  ModIP :: (Int -> Int) -> VM ()
 
 runVM :: Code -> VM () -> Eff ()
 runVM Code{constants,chunk} m = loop state0 m kFinal
@@ -129,6 +138,10 @@ runVM Code{constants,chunk} m = loop state0 m kFinal
         let State{depth,stack} = s
         let v = maybe (error"Pop") id $ Map.lookup (depth-1) stack
         k v s { depth = depth - 1, stack = Map.delete (depth-1) stack }
+      Peek -> \k -> do
+        let State{depth,stack} = s
+        let v = maybe (error"Peek") id $ Map.lookup (depth-1) stack
+        k v s
       GetSlot i -> \k -> do
         let State{stack} = s
         let v = maybe (error "GetSlot") id $ Map.lookup i stack
@@ -151,6 +164,9 @@ runVM Code{constants,chunk} m = loop state0 m kFinal
         case chunk !! ip of
           OP.ARG i -> k i s { ip = ip + 1 }
           _ -> error "FetchArg"
+      ModIP g -> \k -> do
+        let State{ip} = s
+        k () s { ip = g ip }
 
 
 data State = State { ip :: Int, stack :: Map Word8 Value, depth :: Word8 }
