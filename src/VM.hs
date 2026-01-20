@@ -22,69 +22,73 @@ pos0 :: Pos -- TODO: avoid dummy hack
 pos0 = initPos
 
 runCode :: Code -> Eff ()
-runCode Code{constants,chunk=ops} = runVM (execOps ops)
+runCode code = do
+  runVM code fetchDispatchLoop
 
-  where
-    execOps :: [Op] -> VM ()
-    execOps ops = sequence_ [ execOp op | op <- ops ]
+fetchDispatchLoop :: VM ()
+fetchDispatchLoop = do
+  Fetch >>= \case
+    Nothing -> pure () -- halt
+    Just op -> do
+      execOp op
+      fetchDispatchLoop
 
-    execOp :: Op -> VM ()
-    execOp = \case
-      OP.CONSTANT i ->
-        Push $ case constants !! i of
-                 ConstNumber str -> VNumber str
-                 ConstString str -> VString str
+execOp :: Op -> VM ()
+execOp = \case
+  OP.CONSTANT i -> do
+    v <- GetConst i
+    Push v
 
-      OP.NIL -> Push VNil
-      OP.TRUE -> Push (VBool True)
-      OP.FALSE -> Push (VBool False)
-      OP.POP -> do _ <- Pop; pure ()
+  OP.NIL -> Push VNil
+  OP.TRUE -> Push (VBool True)
+  OP.FALSE -> Push (VBool False)
+  OP.POP -> do _ <- Pop; pure ()
 
-      OP.GET_LOCAL i -> do
-        v <- GetSlot i
-        Push v
+  OP.GET_LOCAL i -> do
+    v <- GetSlot i
+    Push v
 
-      OP.SET_LOCAL i -> do
-        v <- Pop; Push v -- peek
-        SetSlot i v
+  OP.SET_LOCAL i -> do
+    v <- Pop; Push v -- peek
+    SetSlot i v
 
-      OP.EQUAL -> do
-        v2 <- Pop
-        v1 <- Pop
-        Push (VBool (vequal v1 v2))
+  OP.EQUAL -> do
+    v2 <- Pop
+    v1 <- Pop
+    Push (VBool (vequal v1 v2))
 
-      OP.GREATER -> execBinary VBool (>)
-      OP.LESS -> execBinary VBool (<)
+  OP.GREATER -> execBinary VBool (>)
+  OP.LESS -> execBinary VBool (<)
 
-      OP.ADD -> do
-        v2 <- Pop
-        v1 <- Pop
-        v <- Effect (vadd pos0 (v1,v2))
-        Push v
+  OP.ADD -> do
+    v2 <- Pop
+    v1 <- Pop
+    v <- Effect (vadd pos0 (v1,v2))
+    Push v
 
-      OP.SUBTRACT -> execBinary VNumber (-)
-      OP.MULTIPLY -> execBinary VNumber (*)
-      OP.DIVIDE -> execBinary VNumber (/)
+  OP.SUBTRACT -> execBinary VNumber (-)
+  OP.MULTIPLY -> execBinary VNumber (*)
+  OP.DIVIDE -> execBinary VNumber (/)
 
-      OP.NOT -> do
-        v <- Pop
-        Push (VBool (not (isTruthy v)))
+  OP.NOT -> do
+    v <- Pop
+    Push (VBool (not (isTruthy v)))
 
-      OP.NEGATE -> do
-        v <- Pop
-        v' <- Effect (vnegate pos0 v)
-        Push v'
+  OP.NEGATE -> do
+    v <- Pop
+    v' <- Effect (vnegate pos0 v)
+    Push v'
 
-      OP.PRINT -> do
-        v <- Pop
-        Effect (Runtime.Print (show v))
+  OP.PRINT -> do
+    v <- Pop
+    Effect (Runtime.Print (show v))
 
-    execBinary :: (a -> Value) -> (Double -> Double -> a) -> VM ()
-    execBinary mk f = do
-      v2 <- Pop
-      v1 <- Pop
-      n <- Effect (binary pos0 f v1 v2)
-      Push (mk n)
+execBinary :: (a -> Value) -> (Double -> Double -> a) -> VM ()
+execBinary mk f = do
+  v2 <- Pop
+  v1 <- Pop
+  n <- Effect (binary pos0 f v1 v2)
+  Push (mk n)
 
 instance Functor VM where fmap = liftM
 instance Applicative VM where pure = Ret; (<*>) = ap
@@ -98,10 +102,15 @@ data VM a where
   Pop :: VM Value
   GetSlot :: Int -> VM Value
   SetSlot :: Int -> Value -> VM ()
+  GetConst :: Int -> VM Value
 
-runVM :: VM () -> Eff ()
-runVM m = loop state0 m $ \() _ -> pure ()
+  Fetch :: VM (Maybe Op)
+
+runVM :: Code -> VM () -> Eff ()
+runVM Code{constants,chunk} m = loop state0 m kFinal
   where
+    progSize = length chunk
+    kFinal () _ = pure ()
     loop :: State -> VM a -> (a -> State -> Eff ()) -> Eff ()
     loop s = \case
       Ret a -> \k -> k a s
@@ -121,8 +130,18 @@ runVM m = loop state0 m $ \() _ -> pure ()
       SetSlot i v -> \k -> do
         let State{stack} = s
         k () s { stack = Map.insert i v stack }
+      GetConst i -> \k -> do
+        let v = case constants !! i of
+                  ConstNumber str -> VNumber str
+                  ConstString str -> VString str
+        k v s
+      Fetch -> \k -> do
+        let State{ip} = s
+        if ip >= progSize then k Nothing s else do
+          let op = chunk !! ip
+          k (Just op) s { ip = ip + 1 } -- TODO: fix when not always 1 byte
 
-data State = State { stack :: Map Int Value, depth :: Int }
+data State = State { ip :: Int, stack :: Map Int Value, depth :: Int }
 
 state0 :: State
-state0 = State { stack = Map.empty, depth = 0 }
+state0 = State { ip = 0, stack = Map.empty, depth = 0 }

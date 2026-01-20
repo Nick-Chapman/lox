@@ -14,7 +14,7 @@ import VM (Code(..),runCode, Const(..))
 
 executeTopDecls :: [Stat] -> Eff ()
 executeTopDecls decls = do
-  case runAsm (compileStats env0 decls) of
+  case runAsm (compileTopLevel decls) of
     Left (pos,mes) -> Runtime.Error pos mes
     Right code -> do
       --_dumpBC code
@@ -27,6 +27,10 @@ _dumpBC Code{constants,chunk=ops} = do
   mapM_ (Print . show) constants
   Print "ops..."
   mapM_ (Print . show) ops
+
+compileTopLevel :: [Stat] -> Asm ()
+compileTopLevel stats = do
+  compileStats env0 stats
 
 data Env = Env { d :: Int, m :: Map String Int }
 
