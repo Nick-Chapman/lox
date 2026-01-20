@@ -3,11 +3,11 @@ module VM (Code(..),Const(..), runCode) where
 import Control.Monad (ap,liftM)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Word (Word8)
 import OP (Op)
 import OP qualified
 import Pos (Pos,initPos)
-import Runtime (Eff)
-import Runtime qualified (Eff(Print))
+import Runtime (Eff(Print))
 import Value (Value(..),binary,vadd,isTruthy,vnegate,vequal)
 
 data Code = Code
@@ -30,12 +30,13 @@ fetchDispatchLoop = do
   Fetch >>= \case
     Nothing -> pure () -- halt
     Just op -> do
-      execOp op
+      dispatch op
       fetchDispatchLoop
 
-execOp :: Op -> VM ()
-execOp = \case
-  OP.CONSTANT i -> do
+dispatch :: Op -> VM ()
+dispatch = \case
+  OP.CONSTANT -> do
+    i <- FetchArg
     v <- GetConst i
     Push v
 
@@ -44,11 +45,13 @@ execOp = \case
   OP.FALSE -> Push (VBool False)
   OP.POP -> do _ <- Pop; pure ()
 
-  OP.GET_LOCAL i -> do
+  OP.GET_LOCAL -> do
+    i <- FetchArg
     v <- GetSlot i
     Push v
 
-  OP.SET_LOCAL i -> do
+  OP.SET_LOCAL -> do
+    i <- FetchArg
     v <- Pop; Push v -- peek
     SetSlot i v
 
@@ -83,6 +86,9 @@ execOp = \case
     v <- Pop
     Effect (Runtime.Print (show v))
 
+  OP.ARG{} ->
+    error "dispatch/OP_ARG"
+
 execBinary :: (a -> Value) -> (Double -> Double -> a) -> VM ()
 execBinary mk f = do
   v2 <- Pop
@@ -100,11 +106,11 @@ data VM a where
   Effect :: Eff a -> VM a
   Push :: Value -> VM ()
   Pop :: VM Value
-  GetSlot :: Int -> VM Value
-  SetSlot :: Int -> Value -> VM ()
-  GetConst :: Int -> VM Value
-
+  GetSlot :: Word8 -> VM Value
+  SetSlot :: Word8 -> Value -> VM ()
+  GetConst :: Word8 -> VM Value
   Fetch :: VM (Maybe Op)
+  FetchArg :: VM Word8
 
 runVM :: Code -> VM () -> Eff ()
 runVM Code{constants,chunk} m = loop state0 m kFinal
@@ -131,7 +137,7 @@ runVM Code{constants,chunk} m = loop state0 m kFinal
         let State{stack} = s
         k () s { stack = Map.insert i v stack }
       GetConst i -> \k -> do
-        let v = case constants !! i of
+        let v = case constants !! fromIntegral i of
                   ConstNumber str -> VNumber str
                   ConstString str -> VString str
         k v s
@@ -139,9 +145,15 @@ runVM Code{constants,chunk} m = loop state0 m kFinal
         let State{ip} = s
         if ip >= progSize then k Nothing s else do
           let op = chunk !! ip
-          k (Just op) s { ip = ip + 1 } -- TODO: fix when not always 1 byte
+          k (Just op) s { ip = ip + 1 }
+      FetchArg -> \k -> do
+        let State{ip} = s
+        case chunk !! ip of
+          OP.ARG i -> k i s { ip = ip + 1 }
+          _ -> error "FetchArg"
 
-data State = State { ip :: Int, stack :: Map Int Value, depth :: Int }
+
+data State = State { ip :: Int, stack :: Map Word8 Value, depth :: Word8 }
 
 state0 :: State
 state0 = State { ip = 0, stack = Map.empty, depth = 0 }

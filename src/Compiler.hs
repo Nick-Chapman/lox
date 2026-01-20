@@ -11,13 +11,14 @@ import Runtime (Eff(Print))
 import Runtime qualified (Eff(Error))
 import Text.Printf (printf)
 import VM (Code(..),runCode, Const(..))
+import Data.Word (Word8)
 
 executeTopDecls :: [Stat] -> Eff ()
 executeTopDecls decls = do
   case runAsm (compileTopLevel decls) of
     Left (pos,mes) -> Runtime.Error pos mes
     Right code -> do
-      --_dumpBC code
+      -- _dumpBC code
       --Print "execute..."
       runCode code
 
@@ -32,7 +33,7 @@ compileTopLevel :: [Stat] -> Asm ()
 compileTopLevel stats = do
   compileStats env0 stats
 
-data Env = Env { d :: Int, m :: Map String Int }
+data Env = Env { d :: Word8, m :: Map String Word8 }
 
 env0 :: Env
 env0 = Env { d = 0, m = Map.empty }
@@ -41,7 +42,7 @@ insertEnv :: String -> Env -> Env
 insertEnv name Env{d,m} =
   Env {d = d+1, m = Map.insert name d m}
 
-lookupEnv :: Pos -> String -> Env -> Asm Int
+lookupEnv :: Pos -> String -> Env -> Asm Word8
 lookupEnv pos name Env{m} =
   maybe err pure $ Map.lookup name m
   where err = Error pos (printf "Undefined variable '%s'." $ name)
@@ -86,13 +87,15 @@ compileExp env = comp
     comp = \case
       ELit lit -> case lit of
         LNumber n -> do
-          c <- EmitConst (ConstNumber n)
-          Emit (OP.CONSTANT c)
+          i <- EmitConst (ConstNumber n)
+          Emit OP.CONSTANT
+          Emit (OP.ARG i)
         LNil{} -> Emit OP.NIL
         LBool b -> Emit (if b then OP.TRUE else OP.FALSE)
         LString str -> do
-          c <- EmitConst (ConstString str)
-          Emit (OP.CONSTANT c)
+          i <- EmitConst (ConstString str)
+          Emit OP.CONSTANT
+          Emit (OP.ARG i)
       EBinary _ e1 op e2 -> do
         comp e1
         comp e2
@@ -115,12 +118,14 @@ compileExp env = comp
           Not -> Emit OP.NOT
       EVar Identifier{pos,name} -> do
         n <- lookupEnv pos name env
-        Emit (OP.GET_LOCAL n)
+        Emit OP.GET_LOCAL
+        Emit (OP.ARG n)
       EThis{} -> undefined
       EAssign Identifier{pos,name} e -> do
         n <- lookupEnv pos name env
         comp e
-        Emit (OP.SET_LOCAL n)
+        Emit OP.SET_LOCAL
+        Emit (OP.ARG n)
       ELogicalAnd{} -> undefined
       ELogicalOr{} -> undefined
       ECall{} -> undefined
@@ -136,7 +141,7 @@ data Asm a where
   Ret :: a -> Asm a
   Bind :: Asm a -> (a -> Asm b) -> Asm b
   Emit :: Op -> Asm ()
-  EmitConst :: Const -> Asm Int
+  EmitConst :: Const -> Asm Word8
   Error :: Pos -> String -> Asm a
 
 type Res = Either (Pos,String) Code
@@ -156,7 +161,8 @@ runAsm m = loop (State [] []) m k0
       EmitConst c -> \k -> do
         let State{cs} = s
         let i = length cs
-        k i s { cs = c : cs }
+        if i > 255 then error "too many constants" else do
+          k (fromIntegral i) s { cs = c : cs }
       Error pos mes -> \_ignoredK -> do
         Left (pos,mes)
 
