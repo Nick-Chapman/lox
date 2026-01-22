@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
-import Code (Code(..),Const(..))
+import Code (Code(..))
 import Control.Monad (ap,liftM)
 import Control.Monad.Fix (MonadFix,mfix)
 import Data.Map (Map)
@@ -103,14 +103,14 @@ compStatThen env = \case
 
       ELit lit -> case lit of
         LNumber n -> do
-          i <- EmitConst (ConstNumber n)
-          Emit OP.CONSTANT
+          i <- EmitConstNum n
+          Emit OP.CONSTANT_NUM
           Emit (OP.ARG i)
         LNil{} -> Emit OP.NIL
         LBool b -> Emit (if b then OP.TRUE else OP.FALSE)
         LString str -> do
-          i <- EmitConst (ConstString str)
-          Emit OP.CONSTANT
+          i <- EmitConstStr str
+          Emit OP.CONSTANT_STR
           Emit (OP.ARG i)
 
       EUnary _pos op e  -> do
@@ -196,7 +196,8 @@ data Asm a where
   Ret :: a -> Asm a
   Bind :: Asm a -> (a -> Asm b) -> Asm b
   Emit :: Op -> Asm ()
-  EmitConst :: Const -> Asm Word8
+  EmitConstNum :: Double -> Asm Word8
+  EmitConstStr :: String -> Asm Word8
   Error :: Pos -> String -> Asm ()
   Here :: Asm Int
   Fix :: (a -> Asm a) -> Asm a
@@ -205,48 +206,67 @@ type Res = Either (Pos,String) Code
 type Err = (Pos,String)
 
 runAsm :: Asm () -> Res
-runAsm m = finish (loop constants0 0 m)
+runAsm m = finish (loop emptyTabN emptyTabS 0 m)
   where
-    finish :: ((),Constants,[Op],[Err]) -> Res
-    finish ((),constants,chunk,errs) =
+    finish :: ((),TabN,TabS,[Op],[Err]) -> Res
+    finish ((),tn,ts,chunk,errs) =
       case errs of
-        [] -> Right $ Code { constants = listConstants constants, chunk }
+        [] -> Right $ Code { numbers = listTabN tn
+                           , strings = listTabS ts
+                           , chunk }
         err:_ -> Left err
 
     -- accumulate constants so can share
-    loop :: Constants -> Int -> Asm a -> (a,Constants,[Op],[Err])
-    loop cs q = \case
-      Ret a -> (a,cs,[],[])
+    loop :: TabN -> TabS -> Int -> Asm a -> (a,TabN,TabS,[Op],[Err])
+    loop tn ts q = \case
+      Ret a -> (a,tn,ts,[],[])
       Bind m f ->
-        case loop cs q m of
-          (a,cs1,ops1,errs1) ->
-            case loop cs1 (q + length ops1) (f a) of
-              (b,cs2,ops2,errs2) ->
-                (b,cs2,ops1++ops2,errs1++errs2)
-      Emit op -> ((),cs,[op],[])
-      EmitConst c -> do
-        let (cs',i) = addConstant c cs
-        (fromIntegral i,cs',[],[])
-      Error pos mes -> ((),cs,[],[(pos,mes)])
-      Here -> (q,cs,[],[])
+        case loop tn ts q m of
+          (a,tn,ts,ops1,errs1) ->
+            case loop tn ts (q + length ops1) (f a) of
+              (b,tn,ts,ops2,errs2) ->
+                (b,tn,ts,ops1++ops2,errs1++errs2)
+      Emit op -> ((),tn,ts,[op],[])
+      EmitConstNum n -> do
+        let (tn',i) = insertTabN n tn
+        (fromIntegral i,tn',ts,[],[])
+      EmitConstStr s -> do
+        let (ts',i) = insertTabS s ts
+        (fromIntegral i,tn,ts',[],[])
+      Error pos mes -> ((),tn,ts,[],[(pos,mes)])
+      Here -> (q,tn,ts,[],[])
       Fix f -> do
-        let x@(a,_,_,_) = loop cs q (f a)
+        let x@(a,_,_,_,_) = loop tn ts q (f a)
         x
 
-data Constants = Constants
-  { i :: Int
-  , m :: Map Const Int
-  }
+data TabN = TabN { i :: Int , m :: Map Double Int }
 
-listConstants :: Constants -> [Const]
-listConstants Constants{m} =
+listTabN :: TabN -> [Double]
+listTabN TabN{m} =
   map fst $ sortBy (comparing snd) $ Map.toList m
 
-constants0 :: Constants
-constants0 = Constants { i = 0, m = Map.empty }
+emptyTabN :: TabN
+emptyTabN = TabN { i = 0, m = Map.empty }
 
-addConstant :: Const -> Constants -> (Constants,Int)
-addConstant c constants@Constants{i,m} =
+insertTabN :: Double -> TabN -> (TabN,Int)
+insertTabN c constants@TabN{i,m} =
   case Map.lookup c m of
     Just i -> (constants,i)
-    Nothing -> (Constants { i = i + 1, m = Map.insert c i m }, i)
+    Nothing -> (TabN { i = i + 1, m = Map.insert c i m }, i)
+
+
+data TabS = TabS { i :: Int , m :: Map String Int }
+
+listTabS :: TabS -> [String]
+listTabS TabS{m} =
+  map fst $ sortBy (comparing snd) $ Map.toList m
+
+emptyTabS :: TabS
+emptyTabS = TabS { i = 0, m = Map.empty }
+
+insertTabS :: String -> TabS -> (TabS,Int)
+insertTabS c constants@TabS{i,m} =
+  case Map.lookup c m of
+    Just i -> (constants,i)
+    Nothing -> (TabS { i = i + 1, m = Map.insert c i m }, i)
+

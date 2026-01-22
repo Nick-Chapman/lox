@@ -1,6 +1,6 @@
 module VM (runCode) where
 
-import Code (Code(..),Const(..))
+import Code (Code(..))
 import Control.Monad (ap,liftM)
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -28,9 +28,13 @@ fetchDispatchLoop = do
 
 dispatch :: Op -> VM ()
 dispatch = \case
-  OP.CONSTANT -> do
+  OP.CONSTANT_NUM -> do
     i <- FetchArg
-    v <- GetConst i
+    v <- GetConstNum i
+    Push v
+  OP.CONSTANT_STR -> do
+    i <- FetchArg
+    v <- GetConstStr i
     Push v
 
   OP.NIL -> Push VNil
@@ -111,13 +115,14 @@ data VM a where
   Peek :: VM Value
   GetSlot :: Word8 -> VM Value
   SetSlot :: Word8 -> Value -> VM ()
-  GetConst :: Word8 -> VM Value
+  GetConstNum :: Word8 -> VM Value
+  GetConstStr :: Word8 -> VM Value
   Fetch :: VM (Maybe Op)
   FetchArg :: VM Word8
   ModIP :: (Int -> Int) -> VM ()
 
 runVM :: Code -> VM () -> Eff ()
-runVM Code{constants,chunk} m = loop state0 m kFinal
+runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
   where
     progSize = length chunk
     kFinal () _ = pure ()
@@ -144,11 +149,15 @@ runVM Code{constants,chunk} m = loop state0 m kFinal
       SetSlot i v -> \k -> do
         let State{stack} = s
         k () s { stack = Map.insert i v stack }
-      GetConst i -> \k -> do
-        if fromIntegral i >= length constants then error (show ("GetConst",i)) else do
-          let v = case constants !! fromIntegral i of
-                    ConstNumber str -> VNumber str
-                    ConstString str -> VString str
+      GetConstNum i -> \k -> do
+        if fromIntegral i >= length numbers then error (show ("GetConstNum",i)) else do
+          let v = case numbers !! fromIntegral i of
+                    n -> VNumber n
+          k v s
+      GetConstStr i -> \k -> do
+        if fromIntegral i >= length strings then error (show ("GetConstStr",i)) else do
+          let v = case strings !! fromIntegral i of
+                    str -> VString str
           k v s
       Fetch -> \k -> do
         let State{ip} = s

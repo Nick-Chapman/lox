@@ -1,4 +1,4 @@
-module Code(Code(..),Const(..),export) where
+module Code(Code(..),export) where
 
 import Data.ByteString.Internal (w2c)
 import OP (Op)
@@ -10,25 +10,23 @@ import Data.Bits (shiftR,(.&.))
 
 
 data Code = Code
-  { constants :: [Const]
+  { numbers :: [Double]
+  , strings :: [String]
   , chunk :: [Op]
   } deriving Show
 
-data Const = ConstNumber Double | ConstString String
-  deriving (Eq,Ord,Show)
-
 export :: Code -> String
-export Code{constants,chunk=ops} = do
-  let n = length constants
+export Code{numbers,strings=_USEME,chunk=ops} = do
+  let n = length numbers
   if n > 255 then error "too many constants" else -- TODO: aligment?
     "LoxCode" ++ [ w2c (fromIntegral n) ] ++
-    concat [ codeConst c | c <- constants ] ++
+    concat [ codeConst n | n <- numbers ] ++
     [ codeOp op | op <- ops ]
 
-codeConst :: Const -> String
+codeConst :: Double -> String
 codeConst = \case
-  ConstNumber d -> map w2c (bytesOfDoubleLittleEndian d) -- TODO: 8 bytes for the double
-  ConstString _str -> undefined -- "S" ++ _str -- TODO: length or terminator
+  d -> map w2c (bytesOfDoubleLittleEndian d) -- TODO: 8 bytes for the double
+  --ConstString _str -> undefined -- "S" ++ _str -- TODO: length or terminator
 
 bytesOfDoubleLittleEndian :: Double -> [Word8]
 bytesOfDoubleLittleEndian d = do
@@ -38,7 +36,8 @@ bytesOfDoubleLittleEndian d = do
 codeOp :: Op -> Char
 codeOp = \case
   OP.ADD                -> '+'
-  OP.CONSTANT           -> 'c'
+  OP.CONSTANT_NUM       -> 'c'
+  OP.CONSTANT_STR       -> '"'
   OP.DIVIDE             -> '/'
   OP.EQUAL              -> '='
   OP.FALSE              -> 'f'

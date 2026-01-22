@@ -36,7 +36,6 @@ main = do
                   abort 70 [err]
         where
 
-
 interpret :: Mode -> [Stat] -> Eff ()
 interpret mode decls =
   case mode of
@@ -45,16 +44,15 @@ interpret mode decls =
       case Compiler.compile decls of
         Left (pos,mes) -> Runtime.Error pos mes
         Right code -> do
-          --let str = show code
-          --Runtime.Print str
+          --Runtime.Print (show code)
+          --Runtime.Print (Code.export code) -- provoke jenga dislike for binary stdout/err
           runCode code
     ModeExport -> do
       case Compiler.compile decls of
         Left (pos,mes) -> Runtime.Error pos mes
         Right code -> do
-          let str = Code.export code
-          Runtime.Print str
-
+          --Runtime.Print (show code)
+          Runtime.Print (Code.export code)
 
 data Mode = ModeTree | ModeBCI | ModeExport
 
@@ -71,7 +69,6 @@ parseArgs = loop Config { files = [], mode = defaultMode }
       "-export":xs -> loop acc { mode = ModeExport } xs
       flag@('-':_):_ -> error ("unknown flag: " ++ flag)
       file:xs -> loop acc { files = file : files acc } xs
-
 
 abort :: Int -> [String] -> IO a
 abort code errs = do

@@ -4,7 +4,8 @@ import Data.Word (Word8)
 
 data Op
   = ADD
-  | CONSTANT
+  | CONSTANT_NUM
+  | CONSTANT_STR
   | DIVIDE
   | EQUAL
   | FALSE

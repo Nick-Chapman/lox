@@ -116,7 +116,7 @@ void debug_sizes() {
 }
 
 void debug(char* contents, size_t size) {
-  //printf("**contents[0..6]] (marker)   = %.7s\n",contents);
+  printf("**contents[0..6]] (marker)   = %.7s\n",contents);
   printf("**contents[7]]    (#doubles) = %d\n",contents[7]);
   u8 num_doubles = contents[7];
   double* doubles = (double*)&contents[8];
@@ -236,10 +236,7 @@ void run_bytecode(char* contents) {
     case '=': {
       Value b = POP;
       Value a = POP;
-      //if (a.typ) {}
-      //if (b.typ) {}
       Value res = ValueOfBool (eqValue(a,b));
-      //Value res = ValueOfBool (false);
       PUSH(res);
       break;
     }
