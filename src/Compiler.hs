@@ -12,6 +12,9 @@ import OP qualified
 import Pos (Pos)
 import Text.Printf (printf)
 
+import Data.List (sortBy)
+import Data.Ord (comparing)
+
 compile :: [Stat] -> Either (Pos,String) Code
 compile decls = runAsm (compStats env0 decls)
 
@@ -202,27 +205,48 @@ type Res = Either (Pos,String) Code
 type Err = (Pos,String)
 
 runAsm :: Asm () -> Res
-runAsm m = finish (loop 0 0 m)
+runAsm m = finish (loop constants0 0 m)
   where
-    finish :: ((),[Const],[Op],[Err]) -> Res
+    finish :: ((),Constants,[Op],[Err]) -> Res
     finish ((),constants,chunk,errs) =
       case errs of
-        [] -> Right $ Code { constants, chunk }
+        [] -> Right $ Code { constants = listConstants constants, chunk }
         err:_ -> Left err
 
-    loop :: Word8 -> Int -> Asm a -> (a,[Const],[Op],[Err])
-    loop i q = \case
-      Ret a -> (a,[],[],[])
+    -- accumulate constants so can share
+    loop :: Constants -> Int -> Asm a -> (a,Constants,[Op],[Err])
+    loop cs q = \case
+      Ret a -> (a,cs,[],[])
       Bind m f ->
-        case loop i q m of
+        case loop cs q m of
           (a,cs1,ops1,errs1) ->
-            case loop (i + fromIntegral (length cs1)) (q + length ops1) (f a) of
+            case loop cs1 (q + length ops1) (f a) of
               (b,cs2,ops2,errs2) ->
-                (b,cs1++cs2,ops1++ops2,errs1++errs2)
-      Emit op -> ((),[],[op],[])
-      EmitConst c -> (i,[c],[],[])
-      Error pos mes -> ((),[],[],[(pos,mes)])
-      Here -> (q,[],[],[])
+                (b,cs2,ops1++ops2,errs1++errs2)
+      Emit op -> ((),cs,[op],[])
+      EmitConst c -> do
+        let (cs',i) = addConstant c cs
+        (fromIntegral i,cs',[],[])
+      Error pos mes -> ((),cs,[],[(pos,mes)])
+      Here -> (q,cs,[],[])
       Fix f -> do
-        let x@(a,_,_,_) = loop i q (f a)
+        let x@(a,_,_,_) = loop cs q (f a)
         x
+
+data Constants = Constants
+  { i :: Int
+  , m :: Map Const Int
+  }
+
+listConstants :: Constants -> [Const]
+listConstants Constants{m} =
+  map fst $ sortBy (comparing snd) $ Map.toList m
+
+constants0 :: Constants
+constants0 = Constants { i = 0, m = Map.empty }
+
+addConstant :: Const -> Constants -> (Constants,Int)
+addConstant c constants@Constants{i,m} =
+  case Map.lookup c m of
+    Just i -> (constants,i)
+    Nothing -> (Constants { i = i + 1, m = Map.insert c i m }, i)

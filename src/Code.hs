@@ -12,10 +12,10 @@ import Data.Bits (shiftR,(.&.))
 data Code = Code
   { constants :: [Const]
   , chunk :: [Op]
-  }
+  } deriving Show
 
 data Const = ConstNumber Double | ConstString String
-  deriving Show
+  deriving (Eq,Ord,Show)
 
 export :: Code -> String
 export Code{constants,chunk=ops} = do

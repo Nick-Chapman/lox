@@ -1,7 +1,8 @@
 
 chapters:
-  echo chap8.list  >> $out  #        69
-  echo chap9.list  >> $out  # +27 =  96
+  echo easy.list  >> $out
+  #echo chap8.list  >> $out  #        69
+  #echo chap9.list  >> $out  # +27 =  96
   #echo chap10.list >> $out  # +43 = 139
   #echo chap11.list >> $out  #  +8 = 147
   #echo chap12.list >> $out  # +60 = 207
@@ -21,22 +22,33 @@ groups:
 fullpath.list: @chapters
   cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|~/other/craftinginterpreters/|' > $out
   #echo ./lambda.lox >> $out #  +1 = 240
-  echo ./fib-iter.lox >> $out #  +1 = 240
+  #echo ./fib-iter.lox >> $out #  +1 = 240
 
 
 lambda.lox : ../examples/lambda.lox :
 fib-iter.lox : ../examples/fib-iter.lox :
 
 
-args-for-exe-under-test:
-  echo '-bci' > $out
+# Tree
+#exe-under-test : ../src/lox.exe : ln $in $out
+#deps-for-exe-under-test : : touch $@
 
 
-rules : fullpath.list rules.sh args-for-exe-under-test
+# Bytecode commpiler (haskell) + VM (C)
+my-lox.sh:
+  echo ./lox.exe -export '$$@ > code.bin && ./vm.exe code.bin' >> $out
+  chmod +x $out
+
+exe-under-test: my-lox.sh : ln $in $out
+deps-for-exe-under-test:
+  echo ../src/lox.exe >> $out
+  echo ../c/vm.exe >> $out
+
+
+rules : fullpath.list rules.sh #args-for-exe-under-test
   ./rules.sh < $in > $out
 
 include rules
 
 
-exe-under-test : ../src/lox.exe : ln $in $out
 reference-lox : ~/other/craftinginterpreters/clox : ln $in $out

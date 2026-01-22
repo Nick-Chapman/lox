@@ -145,10 +145,11 @@ runVM Code{constants,chunk} m = loop state0 m kFinal
         let State{stack} = s
         k () s { stack = Map.insert i v stack }
       GetConst i -> \k -> do
-        let v = case constants !! fromIntegral i of
-                  ConstNumber str -> VNumber str
-                  ConstString str -> VString str
-        k v s
+        if fromIntegral i >= length constants then error (show ("GetConst",i)) else do
+          let v = case constants !! fromIntegral i of
+                    ConstNumber str -> VNumber str
+                    ConstString str -> VString str
+          k v s
       Fetch -> \k -> do
         let State{ip} = s
         if ip >= progSize then k Nothing s else do

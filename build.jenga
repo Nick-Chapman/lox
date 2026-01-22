@@ -1,9 +1,0 @@
-
-example.lox : ~/other/craftinginterpreters/test/number/literals.lox : ln $in $out
-
-code.bin : src/lox.exe example.lox
-  ./lox.exe example.lox -export > $out
-
-*run: c/vm.exe code.bin
-  hd code.bin
-  ./vm.exe code.bin

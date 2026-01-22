@@ -1,0 +1,3 @@
+test/number/literals.lox
+test/precedence.lox
+#test/string/literals.lox

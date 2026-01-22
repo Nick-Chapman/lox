@@ -45,6 +45,8 @@ interpret mode decls =
       case Compiler.compile decls of
         Left (pos,mes) -> Runtime.Error pos mes
         Right code -> do
+          --let str = show code
+          --Runtime.Print str
           runCode code
     ModeExport -> do
       case Compiler.compile decls of
