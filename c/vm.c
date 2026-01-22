@@ -55,7 +55,7 @@ typedef struct {
 
 ObjString* makeString(u16 length, char* payload) {
   //printf("makeString(%d,\"%s\")\n",length,payload);
-  ObjString* str = malloc(sizeof(u16) + length + 1); // TODO: leaks; need GC
+  ObjString* str = malloc(sizeof(u16) + length + 1); // TODO: leaks
   str->length = length;
   memcpy(str->payload,payload,length+1);
   return str;
@@ -64,6 +64,14 @@ ObjString* makeString(u16 length, char* payload) {
 bool eqString(ObjString* s1, ObjString* s2) {
   if (s1->length != s2->length) return false;
   return 0 == memcmp(s1->payload,s2->payload,s1->length);
+}
+
+ObjString* concatString(ObjString* str1, ObjString* str2) {
+  ObjString* str = malloc(sizeof(u16) + str1->length + str2->length + 1); // TODO: leaks
+  str->length = str1->length + str2->length;
+  memcpy(str->payload,               str1->payload,str1->length);
+  memcpy(str->payload + str1->length,str2->payload,str2->length + 1);
+  return str;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -232,6 +240,11 @@ void printStack(Value* base, Value* top) {
 // TODO: vm state in struct?
 // so can have sep functions for push/pop
 
+void runtime_error(char* mes) {
+  printf("%s\n[line 1] in script\n", mes); // TODO: print real backtrace
+  exit(1); // TODO: what code?
+}
+
 void run_code(Code code) {
 
   int stack_size = 100; //TODO: check overflow
@@ -246,9 +259,11 @@ void run_code(Code code) {
   int step = 0;
   //printf("**EXECUTE...\n");
   for (;;step++) {
+
     //printStack(stack,sp);
     char c = *ip++;
     //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c);
+
     switch (c) {
     case '\n': {
       return;
@@ -269,62 +284,87 @@ void run_code(Code code) {
       PUSH(res);
       break;
     }
+
+    case 'g': {
+      u8 i = *ip++;
+      Value res = stack[i];
+      PUSH(res);
+      break;
+    }
+    case 's': {
+      u8 i = *ip++;
+      Value res = sp[-1]; // peek
+      stack[i] = res;
+      break;
+    }
+
     case 'p': {
       printValue(POP);
       putchar('\n');
       break;
     }
+    case 'd': {
+      --sp;
+      break;
+    }
     case '~': {
-      sp[-1] = ValueOfDouble(- AsDouble(sp[-1]));
+      Value a = sp[-1];
+      if (!IsDouble(a)) {
+        runtime_error("Operand must be a number.");
+      }
+      sp[-1] = ValueOfDouble(- AsDouble(a));
       break;
     }
     case '!': {
-      sp[-1] = ValueOfBool(! AsBool(sp[-1]));
-      break;
-    }
-
-    case '*': {
-      Value b = POP;
-      Value a = POP;
-      Value res = ValueOfDouble (AsDouble(a) * AsDouble(b));
-      PUSH(res);
+      Value a = sp[-1];
+      if (!IsBool(a)) {
+        runtime_error("xxx TODO Operand must be a number.");
+      }
+      sp[-1] = ValueOfBool(! AsBool(a));
       break;
     }
     case '+': {
       Value b = POP;
       Value a = POP;
-      Value res = ValueOfDouble (AsDouble(a) + AsDouble(b));
-      PUSH(res);
+      if (IsDouble(a) && IsDouble(b)) {
+        Value res = ValueOfDouble (AsDouble(a) + AsDouble(b));
+        PUSH(res);
+      } else if (IsString(a) && IsString(b)) {
+        Value res = ValueOfString (concatString(AsString(a),AsString(b)));
+        PUSH(res);
+      } else {
+        runtime_error("Operands must be two numbers or two strings.");
+      }
       break;
     }
-    case '-': {
-      Value b = POP;
-      Value a = POP;
-      Value res = ValueOfDouble (AsDouble(a) - AsDouble(b));
-      PUSH(res);
-      break;
+
+#define BIN(op) { \
+      Value b = POP; \
+      Value a = POP; \
+      if (!(IsDouble(a) && IsDouble(b))) { \
+        runtime_error("Operands must be numbers."); \
+      } \
+      Value res = ValueOfDouble (AsDouble(a) op AsDouble(b)); \
+      PUSH(res); \
     }
-    case '/': {
-      Value b = POP;
-      Value a = POP;
-      Value res = ValueOfDouble (AsDouble(a) / AsDouble(b));
-      PUSH(res);
-      break;
+
+    case '-': { BIN(-); break; }
+    case '*': { BIN(*); break; }
+    case '/': { BIN(/); break; }
+
+#define COMPARE(op) { \
+      Value b = POP; \
+      Value a = POP; \
+      if (!(IsDouble(a) && IsDouble(b))) { \
+        runtime_error("Operands must be numbers."); \
+      } \
+      Value res = ValueOfBool (AsDouble(a) op AsDouble(b)); \
+      PUSH(res); \
     }
-    case '<': {
-      Value b = POP;
-      Value a = POP;
-      Value res = ValueOfBool (AsDouble(a) < AsDouble(b));
-      PUSH(res);
-      break;
-    }
-    case '>': {
-      Value b = POP;
-      Value a = POP;
-      Value res = ValueOfBool (AsDouble(a) > AsDouble(b));
-      PUSH(res);
-      break;
-    }
+
+    case '<': { COMPARE (<) break; }
+    case '>': { COMPARE (>) break; }
+
     case '=': {
       Value b = POP;
       Value a = POP;

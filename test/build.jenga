@@ -16,8 +16,7 @@ my-lox.sh:
   chmod +x $out
 
 chapters:
-  echo easy.list  >> $out
-  #echo chap8.list  >> $out  #        69
+  echo chap8.list  >> $out  #        69
   #echo chap9.list  >> $out  # +27 =  96
   #echo chap10.list >> $out  # +43 = 139
   #echo chap11.list >> $out  #  +8 = 147

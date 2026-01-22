@@ -1,5 +1,0 @@
-test/number/literals.lox
-test/precedence.lox
-test/operator/not_equals.lox
-test/comments/line_at_eof.lox
-#test/string/literals.lox # needs string support for + op
