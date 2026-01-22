@@ -4,11 +4,12 @@
 #include <stdlib.h>
 
 //#include <stddef.h>
-//#include <string.h>
+#include <string.h>
 
 #include <assert.h>
 
 typedef unsigned char u8;
+typedef unsigned short u16;
 
 char* readFile(const char* path, size_t* fileSize) {
   FILE* file = fopen(path, "rb");
@@ -39,96 +40,183 @@ char* readFile(const char* path, size_t* fileSize) {
   return buffer;
 }
 
+//////////////////////////////////////////////////////////////////////
+// (Obj) String
+
+//typedef struct {
+//  int obj_size;
+//} Obj;
+
+typedef struct {
+  //Obj obj;
+  u16 length;
+  char payload[];
+} ObjString; // TODO: Name is String (or is this name in use?)
+
+ObjString* makeString(u16 length, char* payload) {
+  //printf("makeString(%d,\"%s\")\n",length,payload);
+  ObjString* str = malloc(sizeof(u16) + length + 1); // TODO: leaks; need GC
+  str->length = length;
+  memcpy(str->payload,payload,length+1);
+  return str;
+}
+
+bool eqString(ObjString* s1, ObjString* s2) {
+  if (s1->length != s2->length) return false;
+  return 0 == memcmp(s1->payload,s2->payload,s1->length);
+}
+
+//////////////////////////////////////////////////////////////////////
+// Value representation
+
 typedef enum {
-  TBool,
-  TNumber, // TODO: be consistent: double/number
+  TBool = 71, // nothing should depend on details of runtime tag values
+  TDouble,
   TNil,
   TString,
 } Typ;
-
-typedef struct {
-  int obj_size;
-} Obj;
-
-typedef struct {
-  Obj obj;
-  int string_size;
-  char chars[];
-} ObjString;
 
 typedef struct {
   Typ typ;
   union {
     double number;
     bool boolean;
-    Obj* obj_pointer;
+    ObjString* string;
   } as;
 } Value;
 
-#define ValueOfDouble(x) ((Value){TNumber, {.number = (x)}})
-#define ValueOfBool(x) ((Value){TBool, {.boolean = (x)}})
 
-//TODO: these should assert of the type is wrong!
-//#define AsDouble(v) ((v).as.number)
-#define AsBool(v) ((v).as.boolean)
+Value ValueOfDouble(double number) {
+  return (Value) { .typ = TDouble, .as = { .number = number } };
+}
+Value ValueOfBool(bool boolean) {
+  return (Value) { .typ = TBool, .as = { .boolean = boolean } };
+}
+Value ValueOfString(ObjString* string) {
+  return (Value) { .typ = TString, .as = { .string = string } };
+}
 
+
+Value ValueNil = { .typ = TNil, .as = { .number = 999 } }; //never look at number;
+
+
+bool IsNil(Value v) {
+  return v.typ == TNil;
+}
 bool IsDouble(Value v) {
-  return v.typ == TNumber;
+  return v.typ == TDouble;
 }
 bool IsBool(Value v) {
   return v.typ == TBool;
 }
+bool IsString(Value v) {
+  return v.typ == TString;
+}
+
 
 double AsDouble(Value v) {
   assert(IsDouble(v));
   return v.as.number;
 }
+bool AsBool(Value v) {
+  assert(IsBool(v));
+  return v.as.boolean;
+}
+ObjString* AsString(Value v) {
+  assert(IsString(v));
+  return v.as.string;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Value operations
 
 void printValue(Value v) {
-  if (IsDouble(v)) {
+  if (IsNil(v)) {
+    printf("nil");
+  } else if (IsDouble(v)) {
     double d = AsDouble(v);
     printf("%g", d);
   } else if (IsBool(v)) {
     printf("%s", AsBool(v) ? "true" : "false");
+  } else if (IsString(v)) {
+    ObjString* str = AsString(v);
+    printf("%.*s",str->length,str->payload);
   } else {
     printf("<unknown-value-type>");
   }
 }
 
 bool eqValue(Value a, Value b) {
+  if (IsNil(a) && IsNil(b)) {
+    return true;
+  }
   if (IsDouble(a) && IsDouble(b)) {
     return AsDouble(a) == AsDouble(b);
   }
   if (IsBool(a) && IsBool(b)) {
     return AsBool(a) == AsBool(b);
   }
+  if (IsString(a) && IsString(b)) {
+    return eqString(AsString(a),AsString(b));
+  }
   return false;
 }
 
-
 //////////////////////////////////////////////////////////////////////
+// decode static program text: constants and bytecode
 
-void debug_sizes() {
-  printf("**sizeof(Typ)=%ld\n",sizeof(Typ));
-  printf("**sizeof(Obj)=%ld\n",sizeof(Obj));
-  printf("**sizeof(ObjString)=%ld\n",sizeof(ObjString));
-  printf("**sizeof(Value)=%ld\n",sizeof(Value));
-}
+typedef struct {
+  u8 num_doubles;
+  u8 num_strings;
+  double* doubles;
+  u16* string_length;
+  char** string_payload;
+  char* ip_start;
+  char* ip_end;
+} Code;
 
-void debug(char* contents, size_t size) {
-  printf("**contents[0..6]] (marker)   = %.7s\n",contents);
-  printf("**contents[7]]    (#doubles) = %d\n",contents[7]);
-  u8 num_doubles = contents[7];
-  double* doubles = (double*)&contents[8];
-  for (int i=0; i<num_doubles; i++) printf("**double[%d] = %g\n",i,doubles[i]);
-  size_t bytecode_offset = 8*(num_doubles+1);
-  printf("**bytecode:");
-  for (size_t i = bytecode_offset; i < size; i++) {
-    char c = contents[i];
-    printf(" %02x",c);
+void show_code(Code code) {
+  printf("**#doubles = %d\n",code.num_doubles);
+  for (int i=0; i<code.num_doubles; i++) {
+    printf("**double[%d] = %g\n",i,code.doubles[i]);
   }
+  printf("**#strings = %d\n",code.num_strings);
+  for (int i=0; i<code.num_strings; i++) {
+    printf("**string_length[%d] = %d\n",i,code.string_length[i]);
+  }
+  for (int i=0; i<code.num_strings; i++) {
+    printf("**string_payload[%d] = %s\n",i,code.string_payload[i]);
+  }
+  printf("**bytecode:");
+  for (char* ip = code.ip_start; ip < code.ip_end; ip++) printf(" %02x",*ip);
   printf("\n");
 }
+
+Code decode(char* contents, size_t size) {
+  u8 num_doubles = contents[6];
+  u8 num_strings = contents[7];
+  size_t off = 8;
+  double* doubles = (double*)&contents[off];
+  off += 8*num_doubles;
+  u16* string_length = (u16*)&contents[off];
+  off += 2*num_strings;
+  char** string_payload = (char**)malloc(sizeof(char*)*num_strings);
+  for (int i = 0; i<num_strings; i++) {
+    string_payload[i] = &contents[off];
+    off += (string_length[i] + 1);
+  }
+  return (Code) {
+    .num_doubles = num_doubles,
+    .num_strings = num_strings,
+    .doubles = doubles,
+    .string_length = string_length,
+    .string_payload = string_payload,
+    .ip_start = &contents[off],
+    .ip_end = &contents[size],
+  };
+}
+
+//////////////////////////////////////////////////////////////////////
 
 void printStack(Value* base, Value* top) {
   int depth = top - base;
@@ -144,11 +232,7 @@ void printStack(Value* base, Value* top) {
 // TODO: vm state in struct?
 // so can have sep functions for push/pop
 
-void run_bytecode(char* contents) {
-
-  u8 num_doubles = contents[7];
-  double* doubles = (double*)&contents[8];
-  size_t bytecode_offset = 8*(num_doubles+1);
+void run_code(Code code) {
 
   int stack_size = 100; //TODO: check overflow
   Value stack[stack_size];
@@ -157,24 +241,32 @@ void run_bytecode(char* contents) {
 #define PUSH(d) (*sp++ = (d))
 #define POP (*--sp)
 
-  char* ip_start = &contents[bytecode_offset];
-  char* ip = ip_start;
+  char* ip = code.ip_start;
 
   int step = 0;
   //printf("**EXECUTE...\n");
   for (;;step++) {
     //printStack(stack,sp);
     char c = *ip++;
-    //printf("%d (%ld) %02x '%c'\n",step,ip-ip_start,c,c);
+    //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c);
     switch (c) {
     case '\n': {
       return;
     }
     case 'c': {
       u8 i = *ip++;
-      double d = doubles[i];
-      //printf("**constant(%d) load -> %g\n",i,d);
-      PUSH(ValueOfDouble(d));
+      double d = code.doubles[i];
+      Value res = ValueOfDouble(d);
+      PUSH(res);
+      break;
+    }
+    case '"': {
+      u8 i = *ip++;
+      u16 length = code.string_length[i];
+      char* payload = code.string_payload[i];
+      ObjString* string = makeString(length,payload);
+      Value res = ValueOfString(string);
+      PUSH(res);
       break;
     }
     case 'p': {
@@ -245,6 +337,16 @@ void run_bytecode(char* contents) {
       PUSH(res);
       break;
     }
+    case 't': {
+      Value res = ValueOfBool(true);
+      PUSH(res);
+      break;
+    }
+    case 'n': {
+      Value res = ValueNil;
+      PUSH(res);
+      break;
+    }
     default:
       printf("unknown op: %02x ('%c')\n",c,c);
       exit(1);
@@ -253,6 +355,15 @@ void run_bytecode(char* contents) {
 }
 
 //////////////////////////////////////////////////////////////////////
+
+void debug_sizes() {
+  printf("**sizeof(u8)=%ld\n",sizeof(u8));
+  printf("**sizeof(u16)=%ld\n",sizeof(u16));
+  printf("**sizeof(Typ)=%ld\n",sizeof(Typ));
+  //printf("**sizeof(Obj)=%ld\n",sizeof(Obj));
+  printf("**sizeof(ObjString)=%ld\n",sizeof(ObjString));
+  printf("**sizeof(Value)=%ld\n",sizeof(Value));
+}
 
 int main(int argc, char* argv[]) {
 
@@ -264,7 +375,8 @@ int main(int argc, char* argv[]) {
   size_t lox_file_size;
   char* contents = readFile(lox_file,&lox_file_size);
 
-  //debug(contents,lox_file_size);
-  run_bytecode(contents);
+  Code code = decode(contents,lox_file_size);
+  //show_code(code);
+  run_code(code);
   //printf("**done\n");
 }

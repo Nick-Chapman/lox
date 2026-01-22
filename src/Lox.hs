@@ -44,7 +44,7 @@ interpret mode decls =
       case Compiler.compile decls of
         Left (pos,mes) -> Runtime.Error pos mes
         Right code -> do
-          --Runtime.Print (show code)
+          Runtime.Print (show code)
           --Runtime.Print (Code.export code) -- provoke jenga dislike for binary stdout/err
           runCode code
     ModeExport -> do
