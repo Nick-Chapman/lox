@@ -170,6 +170,16 @@ bool eqValue(Value a, Value b) {
   return false;
 }
 
+bool isTruthy(Value a) { // everything except nil/false
+  if (IsNil(a)) {
+    return false;
+  }
+  else if (IsBool(a)) {
+    return AsBool(a);
+  }
+  return true;
+}
+
 //////////////////////////////////////////////////////////////////////
 // decode static program text: constants and bytecode
 
@@ -179,8 +189,8 @@ typedef struct {
   double* doubles;
   u16* string_length;
   char** string_payload;
-  char* ip_start;
-  char* ip_end;
+  u8* ip_start;
+  u8* ip_end;
 } Code;
 
 void show_code(Code code) {
@@ -196,7 +206,7 @@ void show_code(Code code) {
     printf("**string_payload[%d] = %s\n",i,code.string_payload[i]);
   }
   printf("**bytecode:");
-  for (char* ip = code.ip_start; ip < code.ip_end; ip++) printf(" %02x",*ip);
+  for (u8* ip = code.ip_start; ip < code.ip_end; ip++) printf(" %02x",*ip);
   printf("\n");
 }
 
@@ -219,8 +229,8 @@ Code decode(char* contents, size_t size) {
     .doubles = doubles,
     .string_length = string_length,
     .string_payload = string_payload,
-    .ip_start = &contents[off],
-    .ip_end = &contents[size],
+    .ip_start = (u8*)&contents[off],
+    .ip_end = (u8*)&contents[size],
   };
 }
 
@@ -254,7 +264,7 @@ void run_code(Code code) {
 #define PUSH(d) (*sp++ = (d))
 #define POP (*--sp)
 
-  char* ip = code.ip_start;
+  u8* ip = code.ip_start;
 
   int step = 0;
   //printf("**EXECUTE...\n");
@@ -262,7 +272,7 @@ void run_code(Code code) {
 
     //printStack(stack,sp);
     char c = *ip++;
-    //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c);
+    //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c); fflush(stdout);
 
     switch (c) {
     case '\0': {
@@ -295,6 +305,22 @@ void run_code(Code code) {
       u8 i = *ip++;
       Value res = sp[-1]; // peek
       stack[i] = res;
+      break;
+    }
+
+    case 'b': { // JUMP_IF_FALSE
+      u8 arg = *ip++;
+      int dist = (int)arg - 128;
+      Value v = sp[-1];
+      bool taken = !isTruthy(v);
+      if (taken) ip+=dist;
+      break;
+    }
+
+    case 'j': { // JUMP
+      u8 arg = *ip++;
+      int dist = (int)arg - 128;
+      ip+=dist;
       break;
     }
 

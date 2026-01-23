@@ -16,7 +16,7 @@ my-lox.sh:
 
 chapters:
   echo chap8.list  >> $out  #        69
-  #echo chap9.list  >> $out  # +27 =  96  # 11 fails remain in vm.c
+  echo chap9.list  >> $out  # +27 =  96  # 11 fails remain in vm.c
   #echo chap10.list >> $out  # +43 = 139
   #echo chap11.list >> $out  #  +8 = 147
   #echo chap12.list >> $out  # +60 = 207
