@@ -16,7 +16,7 @@ $x.actual : exe-under-test @deps-for-exe-under-test $x.lox looseSecondaryErrors.
   ./exe-under-test $x.lox 2>err >$x.actual; cat err | ./looseSecondaryErrors.sh >>$x.actual
 
 *test-$x: $x.expect $x.actual
-  git diff --color $x.expect $x.actual
+  git diff --text --color $x.expect $x.actual
 
 EOF
 

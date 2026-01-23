@@ -12,11 +12,12 @@ import Value (Value(..),Env(..),Closure(..),Method(..),BoundMethod(..),ClassValu
 emptyEnv :: Env
 emptyEnv = Env Map.empty
 
-executeTopDecls :: [Stat] -> Eff Env
+executeTopDecls :: [Stat] -> Eff ()
 executeTopDecls decls = do
   rClock <- NewRef VNativeClockFun
   let globals = insertEnv emptyEnv "clock" rClock
-  executeDecls globals decls
+  _  :: Env <- executeDecls globals decls
+  pure ()
 
 executeDecls :: Env -> [Stat] -> Eff Env
 executeDecls globals = \case

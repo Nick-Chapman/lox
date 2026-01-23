@@ -265,7 +265,7 @@ void run_code(Code code) {
     //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c);
 
     switch (c) {
-    case '\n': {
+    case '\0': {
       return;
     }
     case 'c': {
