@@ -1,30 +1,29 @@
 module Compiler (compile) where
 
-import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..))
+import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..),Func(..))
 import Code (Code(..))
 import Control.Monad (ap,liftM)
 import Control.Monad.Fix (MonadFix,mfix)
+import Data.List (sortBy)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Ord (comparing)
 import Data.Word (Word8)
 import OP (Op)
 import OP qualified
 import Pos (Pos)
 import Text.Printf (printf)
 
-import Data.List (sortBy)
-import Data.Ord (comparing)
-
 compile :: [Stat] -> Either (Pos,String) Code
-compile decls = runAsm (compStats env0 decls)
+compile decls = runAsm (compStats emptyEnv decls)
 
 data Env = Env { d :: Word8, m :: Map String Word8 }
 
-env0 :: Env
-env0 = Env { d = 0, m = Map.empty }
+emptyEnv :: Env
+emptyEnv = Env { d = 0, m = Map.empty }
 
-insertEnv :: String -> Env -> Env
-insertEnv name Env{d,m} =
+insertEnv :: Identifier -> Env -> Env
+insertEnv Identifier{name} Env{d,m} =
   Env {d = d+1, m = Map.insert name d m}
 
 lookupEnv :: Pos -> String -> Env -> Asm Word8
@@ -86,13 +85,29 @@ compStatThen env = \case
     let deSugared = SBlock [ init , SWhile cond $ SBlock [body,update] ]
     compStatThen env deSugared k
 
-  SVarDecl Identifier{name} e -> \k -> do
+  SVarDecl x e -> \k -> do
     compExp e
-    k (insertEnv name env)
+    k (insertEnv x env)
     Emit OP.POP
 
-  SReturn{} -> do undefined
-  SFunDecl{} -> do undefined
+  SReturn _pos expOpt -> \_ignoreK -> do
+    case expOpt of
+      Nothing -> Emit OP.NIL
+      Just exp -> compExp exp
+    Emit OP.RETURN
+
+  SFunDecl Func{name=fname,formals,statements} -> \k -> mdo
+    Emit OP.CONSTANT_FUNC
+    Emit (OP.ARG (fromIntegral $ length formals))
+    relativize def
+    jump after
+    def <- Here
+    compStats (foldl (flip insertEnv) emptyEnv (fname:formals)) statements
+    Emit OP.NIL
+    Emit OP.RETURN
+    after <- Here
+    k (insertEnv fname env)
+
   SClassDecl{} -> do undefined
 
   where
@@ -163,7 +178,11 @@ compStatThen env = \case
         end <- Here
         pure ()
 
-      ECall{} -> undefined
+      ECall _pos func args -> do
+        compExp func
+        sequence_ [ compExp arg | arg <- args ]
+        Emit OP.CALL
+        Emit (OP.ARG (fromIntegral $ length args))
 
       EThis{} -> undefined
       ESuperVar{} -> undefined
@@ -182,8 +201,8 @@ relativize a = do
   b <- Here
   let dist = a - b - 1
   Emit $
-    if dist > 127 then error "jump too far forward" else do
-      if dist < -128 then error "jump too far backward" else do
+    if dist > 127 then error "too far forward" else do
+      if dist < -128 then error "too far backward" else do
         let u = dist + 128 -- 0..255
         OP.ARG (fromIntegral u)
 
@@ -216,7 +235,6 @@ runAsm m = finish (loop emptyTabN emptyTabS 0 m)
                            , chunk }
         err:_ -> Left err
 
-    -- accumulate constants so can share
     loop :: TabN -> TabS -> Int -> Asm a -> (a,TabN,TabS,[Op],[Err])
     loop tn ts q = \case
       Ret a -> (a,tn,ts,[],[])
@@ -238,6 +256,7 @@ runAsm m = finish (loop emptyTabN emptyTabS 0 m)
       Fix f -> do
         let x@(a,_,_,_,_) = loop tn ts q (f a)
         x
+
 
 data TabN = TabN { i :: Int , m :: Map Double Int }
 

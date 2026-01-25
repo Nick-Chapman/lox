@@ -60,6 +60,7 @@ xdepends:
   echo 'Interpreter.o : JustLine.hi' >> $@
   echo 'Compiler.o : VM.hi' >> $@
   echo 'Compiler.o : JustLine.hi' >> $@
+  echo 'Compiler.o : LineCol.hi' >> $@
   echo 'Parser.o : JustLine.hi' >> $@
   echo 'Scanner.o : JustLine.hi' >> $@
   echo 'Resolver.o : JustLine.hi' >> $@
@@ -67,6 +68,7 @@ xdepends:
   echo 'Lox.o : VM.hi' >> $@
   echo 'Runtime.o : JustLine.hi' >> $@
   echo 'VM.o : JustLine.hi' >> $@
+  echo 'VM.o : LineCol.hi' >> $@
   echo 'Compiler.o : Value.hi' >> $@
   echo 'Compiler.o : OP.hi' >> $@
   echo 'Compiler.o : Runtime.hi' >> $@

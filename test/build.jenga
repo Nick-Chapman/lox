@@ -10,14 +10,14 @@ deps-for-exe-under-test:
   echo ../c/vm.exe >> $out
 
 my-lox.sh:
-  #echo './lox.exe -bci $$@' >> $out
-  echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out
+  echo './lox.exe -bci $$@' >> $out
+  #echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out
   chmod +x $out
 
 chapters:
   echo chap8.list  >> $out  #        69
   echo chap9.list  >> $out  # +27 =  96  # 11 fails remain in vm.c
-  #echo chap10.list >> $out  # +43 = 139
+  echo chap10.list >> $out  # +43 = 139
   #echo chap11.list >> $out  #  +8 = 147
   #echo chap12.list >> $out  # +60 = 207
   #echo chap13.list >> $out  # +32 = 239

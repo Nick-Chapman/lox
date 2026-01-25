@@ -6,6 +6,7 @@ data Op
   = ADD
   | CONSTANT_NUM
   | CONSTANT_STR
+  | CONSTANT_FUNC
   | DIVIDE
   | EQUAL
   | FALSE
@@ -23,6 +24,7 @@ data Op
   | SET_LOCAL
   | SUBTRACT
   | TRUE
-
+  | CALL
+  | RETURN
   | ARG Word8
   deriving Show
