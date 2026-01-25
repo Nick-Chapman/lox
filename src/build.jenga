@@ -68,6 +68,7 @@ xdepends:
   echo 'Lox.o : VM.hi' >> $@
   echo 'Runtime.o : JustLine.hi' >> $@
   echo 'VM.o : JustLine.hi' >> $@
+  echo 'Code.o : JustLine.hi' >> $@
   echo 'VM.o : LineCol.hi' >> $@
   echo 'Compiler.o : Value.hi' >> $@
   echo 'Compiler.o : OP.hi' >> $@

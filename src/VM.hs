@@ -8,12 +8,9 @@ import Data.Map qualified as Map
 import Data.Word (Word8)
 import OP (Op)
 import OP qualified
-import Pos (Pos,initPos)
+import Pos (Pos)
 import Runtime (Eff(Print,Error))
 import Text.Printf (printf)
-
-pos0 :: Pos -- TODO: Avoid dummy hack. Now have test which fails with wrong position.
-pos0 = initPos
 
 runCode :: Code -> Eff ()
 runCode code = do
@@ -23,12 +20,12 @@ fetchDispatchLoop :: VM ()
 fetchDispatchLoop = do
   Fetch >>= \case
     Nothing -> pure () -- Halt
-    Just op -> do
-      dispatch op
+    Just (pos,op) -> do
+      dispatch pos op
       fetchDispatchLoop
 
-dispatch :: Op -> VM ()
-dispatch = \case
+dispatch :: Pos -> Op -> VM ()
+dispatch pos = \case
   OP.CONSTANT_NUM -> do
     i <- FetchArg
     v <- GetConstNum i
@@ -64,7 +61,7 @@ dispatch = \case
   OP.ADD -> do
     v2 <- Pop
     v1 <- Pop
-    v <- Effect (vadd pos0 (v1,v2))
+    v <- Effect (vadd pos (v1,v2))
     Push v
 
   OP.SUBTRACT -> execBinary VNumber (-)
@@ -77,7 +74,7 @@ dispatch = \case
 
   OP.NEGATE -> do
     v <- Pop
-    v' <- Effect (vnegate pos0 v)
+    v' <- Effect (vnegate pos v)
     Push v'
 
   OP.PRINT -> do
@@ -103,7 +100,7 @@ dispatch = \case
     nActuals <- FetchArg
     Peek (1+nActuals) >>= \case
       VFunc FuncDef{codePointer=newIP,arity=nFormals} -> do
-        Effect (checkArity pos0 nFormals nActuals)
+        Effect (checkArity nFormals nActuals)
         prevIP <- GetIP
         prevBase <- GetBase
         PushCallFrame CallFrame { prevIP, prevBase }
@@ -111,7 +108,7 @@ dispatch = \case
         SetBase (d - nActuals - 1)
         SetIP newIP
       _ -> do
-        Effect (Runtime.Error pos0 "Can only call functions and classes.")
+        Effect (Runtime.Error pos "Can only call functions and classes.")
 
   OP.RETURN -> do
     res <- Pop
@@ -125,18 +122,19 @@ dispatch = \case
   OP.ARG{} ->
     error "dispatch/OP_ARG"
 
+  where
 
-checkArity :: Pos -> Word8 -> Word8 -> Eff ()
-checkArity pos nformals nargs =
-  if nformals == nargs then pure () else
-    Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
+  checkArity :: Word8 -> Word8 -> Eff ()
+  checkArity nformals nargs =
+    if nformals == nargs then pure () else
+      Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
 
-execBinary :: (a -> Value) -> (Double -> Double -> a) -> VM ()
-execBinary mk f = do
-  v2 <- Pop
-  v1 <- Pop
-  n <- Effect (binary pos0 f v1 v2)
-  Push (mk n)
+  execBinary :: (a -> Value) -> (Double -> Double -> a) -> VM ()
+  execBinary mk f = do
+    v2 <- Pop
+    v1 <- Pop
+    n <- Effect (binary pos f v1 v2)
+    Push (mk n)
 
 
 instance Functor VM where fmap = liftM
@@ -154,7 +152,7 @@ data VM a where
   SetSlot :: Word8 -> Value -> VM ()
   GetConstNum :: Word8 -> VM Value
   GetConstStr :: Word8 -> VM Value
-  Fetch :: VM (Maybe Op)
+  Fetch :: VM (Maybe (Pos,Op))
   FetchArg :: VM Word8
   ModIP :: (Int -> Int) -> VM ()
   GetIP :: VM Int
@@ -213,12 +211,12 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       Fetch -> \k -> do
         let State{ip} = s
         if ip >= progSize then k Nothing s else do
-          let op = chunk !! ip
-          k (Just op) s { ip = ip + 1 }
+          let posAndOp = chunk !! ip
+          k (Just posAndOp) s { ip = ip + 1 }
       FetchArg -> \k -> do
         let State{ip} = s
         case chunk !! ip of
-          OP.ARG i -> k i s { ip = ip + 1 }
+          (_,OP.ARG i) -> k i s { ip = ip + 1 }
           _ -> error "FetchArg"
 
       ModIP g -> \k -> do

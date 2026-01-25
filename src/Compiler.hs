@@ -11,7 +11,7 @@ import Data.Ord (comparing)
 import Data.Word (Word8)
 import OP (Op)
 import OP qualified
-import Pos (Pos)
+import Pos (Pos,initPos)
 import Text.Printf (printf)
 
 compile :: [Stat] -> Either (Pos,String) Code
@@ -128,16 +128,16 @@ compStatThen env = \case
           Emit OP.CONSTANT_STR
           Emit (OP.ARG i)
 
-      EUnary _pos op e  -> do
+      EUnary pos op e  -> do
         compExp e
-        case op of
+        Position pos $ case op of
           Negate -> Emit OP.NEGATE
           Not -> Emit OP.NOT
 
-      EBinary _ e1 op e2 -> do
+      EBinary pos e1 op e2 -> do
         compExp e1
         compExp e2
-        case op of
+        Position pos $ case op of
           Add -> Emit OP.ADD
           Sub -> Emit OP.SUBTRACT
           Mul -> Emit OP.MULTIPLY
@@ -178,10 +178,10 @@ compStatThen env = \case
         end <- Here
         pure ()
 
-      ECall _pos func args -> do
+      ECall pos func args -> do
         compExp func
         sequence_ [ compExp arg | arg <- args ]
-        Emit OP.CALL
+        Position pos $ Emit OP.CALL
         Emit (OP.ARG (fromIntegral $ length args))
 
       EThis{} -> undefined
@@ -214,6 +214,7 @@ instance MonadFix Asm where mfix = Fix
 data Asm a where
   Ret :: a -> Asm a
   Bind :: Asm a -> (a -> Asm b) -> Asm b
+  Position :: Pos -> Asm a -> Asm a
   Emit :: Op -> Asm ()
   EmitConstNum :: Double -> Asm Word8
   EmitConstStr :: String -> Asm Word8
@@ -225,9 +226,9 @@ type Res = Either (Pos,String) Code
 type Err = (Pos,String)
 
 runAsm :: Asm () -> Res
-runAsm m = finish (loop emptyTabN emptyTabS 0 m)
+runAsm m = finish (loop initPos emptyTabN emptyTabS 0 m)
   where
-    finish :: ((),TabN,TabS,[Op],[Err]) -> Res
+    finish :: ((),TabN,TabS,[(Pos,Op)],[Err]) -> Res
     finish ((),tn,ts,chunk,errs) =
       case errs of
         [] -> Right $ Code { numbers = listTabN tn
@@ -235,16 +236,17 @@ runAsm m = finish (loop emptyTabN emptyTabS 0 m)
                            , chunk }
         err:_ -> Left err
 
-    loop :: TabN -> TabS -> Int -> Asm a -> (a,TabN,TabS,[Op],[Err])
-    loop tn ts q = \case
+    loop :: Pos -> TabN -> TabS -> Int -> Asm a -> (a,TabN,TabS,[(Pos,Op)],[Err])
+    loop pos tn ts q = \case
       Ret a -> (a,tn,ts,[],[])
       Bind m f ->
-        case loop tn ts q m of
+        case loop pos tn ts q m of
           (a,tn,ts,ops1,errs1) ->
-            case loop tn ts (q + length ops1) (f a) of
+            case loop pos tn ts (q + length ops1) (f a) of
               (b,tn,ts,ops2,errs2) ->
                 (b,tn,ts,ops1++ops2,errs1++errs2)
-      Emit op -> ((),tn,ts,[op],[])
+      Position pos' m -> loop pos' tn ts q m
+      Emit op -> ((),tn,ts,[(pos,op)],[])
       EmitConstNum n -> do
         let (tn',i) = insertTabN n tn
         (fromIntegral i,tn',ts,[],[])
@@ -254,9 +256,8 @@ runAsm m = finish (loop emptyTabN emptyTabS 0 m)
       Error pos mes -> ((),tn,ts,[],[(pos,mes)])
       Here -> (q,tn,ts,[],[])
       Fix f -> do
-        let x@(a,_,_,_,_) = loop tn ts q (f a)
+        let x@(a,_,_,_,_) = loop pos tn ts q (f a)
         x
-
 
 data TabN = TabN { i :: Int , m :: Map Double Int }
 
