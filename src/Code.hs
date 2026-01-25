@@ -50,7 +50,7 @@ encodeOp = c2w . \case
   OP.ADD                -> '+'
   OP.CONSTANT_NUM       -> 'c'
   OP.CONSTANT_STR       -> '"'
-  OP.CONSTANT_FUNC      -> undefined "D"
+  OP.CONSTANT_FUNC      -> 'F'
   OP.DIVIDE             -> '/'
   OP.EQUAL              -> '='
   OP.FALSE              -> 'f'
@@ -68,6 +68,6 @@ encodeOp = c2w . \case
   OP.SET_LOCAL          -> 's'
   OP.SUBTRACT           -> '-'
   OP.TRUE               -> 't'
-  OP.CALL               -> undefined 'C'
-  OP.RETURN             -> undefined 'R'
+  OP.CALL               -> 'C'
+  OP.RETURN             -> 'R'
   OP.ARG byte           -> w2c byte

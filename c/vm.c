@@ -2,10 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-//#include <stddef.h>
 #include <string.h>
-
 #include <assert.h>
 
 typedef unsigned char u8;
@@ -51,7 +48,7 @@ typedef struct {
   //Obj obj;
   u16 length;
   char payload[];
-} ObjString; // TODO: Name is String (or is this name in use?)
+} ObjString;
 
 ObjString* makeString(u16 length, char* payload) {
   //printf("makeString(%d,\"%s\")\n",length,payload);
@@ -75,6 +72,21 @@ ObjString* concatString(ObjString* str1, ObjString* str2) {
 }
 
 //////////////////////////////////////////////////////////////////////
+// (Obj) Func
+
+typedef struct {
+  u8 arity;
+  u8* code;
+} ObjFunc;
+
+ObjFunc* makeFunc(u8 arity, u8* code) {
+  ObjFunc* func = malloc(sizeof(ObjFunc)); // TODO: leaks
+  func->arity = arity;
+  func->code = code;
+  return func;
+}
+
+//////////////////////////////////////////////////////////////////////
 // Value representation
 
 typedef enum {
@@ -82,6 +94,7 @@ typedef enum {
   TDouble,
   TNil,
   TString,
+  TFunc,
 } Typ;
 
 typedef struct {
@@ -90,6 +103,7 @@ typedef struct {
     double number;
     bool boolean;
     ObjString* string;
+    ObjFunc* func;
   } as;
 } Value;
 
@@ -102,6 +116,9 @@ Value ValueOfBool(bool boolean) {
 }
 Value ValueOfString(ObjString* string) {
   return (Value) { .typ = TString, .as = { .string = string } };
+}
+Value ValueOfFunc(ObjFunc* func) {
+  return (Value) { .typ = TFunc, .as = { .func = func } };
 }
 
 
@@ -120,6 +137,9 @@ bool IsBool(Value v) {
 bool IsString(Value v) {
   return v.typ == TString;
 }
+bool IsFunc(Value v) {
+  return v.typ == TFunc;
+}
 
 
 double AsDouble(Value v) {
@@ -133,6 +153,10 @@ bool AsBool(Value v) {
 ObjString* AsString(Value v) {
   assert(IsString(v));
   return v.as.string;
+}
+ObjFunc* AsFunc(Value v) {
+  assert(IsFunc(v));
+  return v.as.func;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -149,6 +173,8 @@ void printValue(Value v) {
   } else if (IsString(v)) {
     ObjString* str = AsString(v);
     printf("%.*s",str->length,str->payload);
+  } else if (IsFunc(v)) {
+    printf("<func>");
   } else {
     printf("<unknown-value-type>");
   }
@@ -247,6 +273,14 @@ void printStack(Value* base, Value* top) {
 }
 
 //////////////////////////////////////////////////////////////////////
+// Call frame
+
+typedef struct {
+  Value* base;
+  u8* ip;
+} CallFrame;
+
+//////////////////////////////////////////////////////////////////////
 // TODO: vm state in struct?
 // so can have sep functions for push/pop
 
@@ -259,7 +293,11 @@ void run_code(Code code) {
 
   int stack_size = 100; //TODO: check overflow
   Value stack[stack_size];
-  Value* sp = stack;
+  Value* base = stack;
+  Value* sp = stack; //stack depth
+
+  CallFrame frames[100]; //TODO: check overflow
+  int frame_depth = 0;
 
 #define PUSH(d) (*sp++ = (d))
 #define POP (*--sp)
@@ -297,14 +335,14 @@ void run_code(Code code) {
 
     case 'g': {
       u8 i = *ip++;
-      Value res = stack[i];
+      Value res = base[i];
       PUSH(res);
       break;
     }
     case 's': {
       u8 i = *ip++;
       Value res = sp[-1]; // peek
-      stack[i] = res;
+      base[i] = res;
       break;
     }
 
@@ -343,10 +381,7 @@ void run_code(Code code) {
     }
     case '!': {
       Value a = sp[-1];
-      if (!IsBool(a)) {
-        runtime_error("xxx TODO Operand must be a number.");
-      }
-      sp[-1] = ValueOfBool(! AsBool(a));
+      sp[-1] = ValueOfBool(! isTruthy(a));
       break;
     }
     case '+': {
@@ -410,6 +445,43 @@ void run_code(Code code) {
     }
     case 'n': {
       Value res = ValueNil;
+      PUSH(res);
+      break;
+    }
+    case 'F': {
+      u8 arity = *ip++;
+      int dist = (int)(*ip++) - 128;
+      u8* code = ip + dist;
+      ObjFunc* func = makeFunc(arity,code);
+      Value res = ValueOfFunc(func);
+      PUSH(res);
+      break;
+    }
+    case 'C': {
+      u8 nActuals = *ip++;
+      Value f = sp[-1-nActuals];
+      if (!IsFunc(f)) {
+        runtime_error("Can only call functions and classes.");
+      }
+      ObjFunc* func = AsFunc(f);
+      int nFormals = func->arity;
+      if (nActuals != nFormals) {
+        char buf[80];
+        sprintf(buf,"Expected %d arguments but got %d.",nFormals,nActuals);
+        runtime_error(buf);
+      }
+      CallFrame cf = { .ip = ip, .base = base };
+      frames[frame_depth++] = cf;
+      base = sp - nActuals - 1;
+      ip = func->code;
+      break;
+    }
+    case 'R': {
+      Value res = POP;
+      CallFrame cf = frames[--frame_depth];
+      sp = base;
+      ip = cf.ip;
+      base = cf.base;
       PUSH(res);
       break;
     }

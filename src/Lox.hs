@@ -55,7 +55,7 @@ runMode mode decls =
         Left (pos,mes) ->
           runEff (Runtime.Error pos mes)
         Right code -> do
-          print code -- debug
+          --print code -- debug
           --putStr (Code.export code) -- debug
           writeBinaryFile path (Code.export code)
 
