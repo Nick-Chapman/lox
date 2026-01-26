@@ -1,13 +1,11 @@
 module Code(Code(..),export) where
 
+import Data.Bits (shiftR,(.&.))
 import Data.ByteString.Internal (w2c,c2w)
+import Data.Word (Word8,Word16,Word64)
+import GHC.Float (castDoubleToWord64)
 import OP (Op)
 import OP qualified
-import Data.Word (Word8,Word16,Word64)
-
-import GHC.Float (castDoubleToWord64)
-import Data.Bits (shiftR,(.&.))
-
 import Pos (Pos)
 
 export :: Code -> String

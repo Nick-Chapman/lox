@@ -131,9 +131,9 @@ dispatch pos = \case
 
   OP.CLOSURE -> do
     arity <- FetchArg
-    i <- FetchArg
-    dest <- (+ (fromIntegral i - 128)) <$> GetIP
-    n <- FetchArg
+    numUpvalues <- FetchArg
+    off <- FetchArg
+    dest <- (+ (fromIntegral off - 128)) <$> GetIP
     let
       getClosedValue :: VM (Ref Value)
       getClosedValue = do
@@ -150,7 +150,7 @@ dispatch pos = \case
               _ ->
                 error (show (pos,"getClosedValue",op))
 
-    upValues <- sequence $ replicate (fromIntegral n) getClosedValue
+    upValues <- sequence $ replicate (fromIntegral numUpvalues) getClosedValue
     Push $ VFunc FuncDef{ codePointer = dest, arity, upValues }
 
   OP.GET_UPVALUE -> do

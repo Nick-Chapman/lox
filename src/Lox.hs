@@ -2,7 +2,9 @@ module Lox (main) where
 
 import Ast (Stat)
 import Code qualified (export)
+import Disassemble qualified (dis)
 import Compiler qualified (compile)
+import Control.Monad (when)
 import Data.Text qualified as Text
 import GHC.IO.Encoding (setLocaleEncoding,char8)
 import Interpreter qualified (executeTopDecls)
@@ -19,7 +21,7 @@ import VM (runCode)
 main :: IO ()
 main = do
   setLocaleEncoding char8
-  Config{files,mode} <- parseArgs <$> getArgs
+  config@Config{files} <- parseArgs <$> getArgs
   case files of
     [] -> error "no repl"
     _:_:_ -> error "too any args"
@@ -30,12 +32,10 @@ main = do
         Right decls -> do
           case Resolver.resolveTop decls of
             errs@(_:_)-> abort 65 errs
-            [] ->
-              runMode mode decls
-        where
+            [] -> runMode config decls
 
-runMode :: Mode -> [Stat] -> IO ()
-runMode mode decls =
+runMode :: Config -> [Stat] -> IO ()
+runMode Config{dis,mode} decls =
   case mode of
     ModeTree -> do
       runEff (Interpreter.executeTopDecls decls)
@@ -43,11 +43,9 @@ runMode mode decls =
     ModeBCI -> do
       case Compiler.compile decls of
         Left (pos,mes) ->
-          -- i.e. for undefined variable errors, which are caught at compile time
           runEff (Runtime.Error pos mes)
-
         Right code -> do
-          --print code -- debug
+          when dis $ putOut (Disassemble.dis code)
           runEff (runCode code)
 
     ModeExport path -> do
@@ -55,10 +53,8 @@ runMode mode decls =
         Left (pos,mes) ->
           runEff (Runtime.Error pos mes)
         Right code -> do
-          --print code -- debug
-          --putStr (Code.export code) -- debug
+          when dis $ putOut (Disassemble.dis code)
           writeBinaryFile path (Code.export code)
-
 
 runEff :: Eff () -> IO ()
 runEff eff = do
@@ -68,16 +64,17 @@ runEff eff = do
 
 data Mode = ModeTree | ModeBCI | ModeExport FilePath
 
-data Config = Config { files :: [String], mode :: Mode }
+data Config = Config { files :: [String], mode :: Mode, dis :: Bool }
 
 parseArgs :: [String] -> Config
-parseArgs = loop Config { files = [], mode = defaultMode }
+parseArgs = loop Config { files = [], mode = defaultMode, dis = False }
   where
     defaultMode = ModeBCI
     loop acc = \case
       [] -> acc
       "-tree":xs -> loop acc { mode = ModeTree } xs
       "-bci":xs -> loop acc { mode = ModeBCI } xs
+      "-dis":xs -> loop acc { dis = True } xs
       "-export":x:xs -> loop acc { mode = ModeExport x } xs
       flag@('-':_):_ -> error ("unknown flag: " ++ flag)
       file:xs -> loop acc { files = file : files acc } xs

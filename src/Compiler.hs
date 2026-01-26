@@ -90,8 +90,8 @@ compStatThen env = \case
     let free = Set.toList $ fvFunc func
     Emit OP.CLOSURE
     Emit (OP.ARG (fromIntegral $ length formals))
-    relativize def
     Emit (OP.ARG (fromIntegral $ length free))
+    relativize def
     sequence_ [ emitCloseVar x | x <- free ]
     jump after
     def <- Here
