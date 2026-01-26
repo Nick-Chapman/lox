@@ -9,20 +9,21 @@ import Data.Word (Word8)
 import OP (Op)
 import OP qualified
 import Pos (Pos)
-import Runtime (Eff(Print,Error))
+import Runtime (Ref,Eff(Print,Error,NewRef,ReadRef,WriteRef))
 import Text.Printf (printf)
 
 runCode :: Code -> Eff ()
 runCode code = do
-  runVM code fetchDispatchLoop
+  runVM code (fetchDispatchLoop 1)
 
-fetchDispatchLoop :: VM ()
-fetchDispatchLoop = do
+fetchDispatchLoop :: Int -> VM ()
+fetchDispatchLoop _i = do
   Fetch >>= \case
     Nothing -> pure () -- Halt
     Just (pos,op) -> do
+      --Effect (Runtime.Print (show (_i,op)))
       dispatch pos op
-      fetchDispatchLoop
+      fetchDispatchLoop (_i+1)
 
 dispatch :: Pos -> Op -> VM ()
 dispatch pos = \case
@@ -42,13 +43,15 @@ dispatch pos = \case
 
   OP.GET_LOCAL -> do
     i <- FetchArg
-    v <- GetSlot i
+    r <- GetSlotRef i
+    v <- Effect (ReadRef r)
     Push v
 
   OP.SET_LOCAL -> do
     i <- FetchArg
     v <- Peek 1
-    SetSlot i v
+    r <- GetSlotRef i
+    Effect (WriteRef r v)
 
   OP.EQUAL -> do
     v2 <- Pop
@@ -99,25 +102,30 @@ dispatch pos = \case
   OP.CALL -> do
     nActuals <- FetchArg
     Peek (1+nActuals) >>= \case
-      VFunc FuncDef{codePointer=newIP,arity=nFormals,upValues} -> do
-        Effect (checkArity nFormals nActuals)
-        prevIP <- GetIP
-        prevBase <- GetBase
-        prevUps <- GetUps
-        PushCallFrame CallFrame { prevIP, prevBase, prevUps }
-        d <- GetDepth
-        SetBase (d - nActuals - 1)
-        SetIP newIP
-        SetUps upValues
+      VRef r -> do
+        Effect (ReadRef r) >>= \case
+          VFunc FuncDef{codePointer=newIP,arity=nFormals,upValues} -> do
+            Effect (checkArity nFormals nActuals)
+            prevIP <- GetIP
+            prevBase <- GetBase
+            prevUps <- GetUps
+            PushCallFrame CallFrame { prevIP, prevBase, prevUps }
+            d <- GetDepth
+            SetBase (d - nActuals - 1)
+            SetIP newIP
+            SetUps upValues
+          _ -> do
+            Effect (Runtime.Error pos "Can only call functions and classes.")
       _ -> do
-        Effect (Runtime.Error pos "Can only call functions and classes.")
+        error "OP.CALL/not-ref"
 
   OP.RETURN -> do
     res <- Pop
     base <- GetBase
-    CallFrame { prevIP, prevBase } <- PopCallFrame
+    CallFrame { prevIP, prevBase, prevUps } <- PopCallFrame
     SetIP prevIP
     SetBase prevBase
+    SetUps prevUps
     SetDepth base
     Push res
 
@@ -127,25 +135,41 @@ dispatch pos = \case
     dest <- (+ (fromIntegral i - 128)) <$> GetIP
     n <- FetchArg
     let
-      getClosedValue :: VM Value
+      getClosedValue :: VM (Ref Value)
       getClosedValue = do
         Fetch >>= \case
           Nothing -> undefined
           Just (pos,op) -> do
-            dispatch pos op
-            Pop
-    upValues :: [Value] <- sequence $ replicate (fromIntegral n) getClosedValue
+            case op of
+              OP.GET_LOCAL -> do
+                i <- FetchArg
+                GetSlotRef i
+              OP.GET_UPVALUE -> do
+                i <- FetchArg
+                GetUpValueRef i
+              _ ->
+                error (show (pos,"getClosedValue",op))
+
+    upValues <- sequence $ replicate (fromIntegral n) getClosedValue
     Push $ VFunc FuncDef{ codePointer = dest, arity, upValues }
 
   OP.GET_UPVALUE -> do
     i <- FetchArg
-    v <- GetUpValue i
+    r <- GetUpValueRef i
+    v <- Effect (ReadRef r)
     Push v
 
   OP.SET_UPVALUE -> do
     i <- FetchArg
     v <- Peek 1
-    SetUpValue i v
+    r <- GetUpValueRef i
+    Effect (WriteRef r v)
+
+  OP.INDIRECT -> do
+    v <- Pop
+    r <- Effect (NewRef v)
+    Push (VRef r)
+    pure ()
 
   OP.ARG{} ->
     error "dispatch/OP_ARG"
@@ -176,8 +200,7 @@ data VM a where
   Push :: Value -> VM ()
   Pop :: VM Value
   Peek :: Word8 -> VM Value
-  GetSlot :: Word8 -> VM Value
-  SetSlot :: Word8 -> Value -> VM ()
+  GetSlotRef :: Word8 -> VM (Ref Value)
   GetConstNum :: Word8 -> VM Value
   GetConstStr :: Word8 -> VM Value
   Fetch :: VM (Maybe (Pos,Op))
@@ -193,10 +216,9 @@ data VM a where
   PushCallFrame :: CallFrame -> VM ()
   PopCallFrame :: VM CallFrame
 
-  GetUps :: VM [Value]
-  SetUps :: [Value] -> VM ()
-  GetUpValue :: Word8 -> VM Value
-  SetUpValue :: Word8 -> Value -> VM ()
+  GetUps :: VM [Ref Value]
+  SetUps :: [Ref Value] -> VM ()
+  GetUpValueRef :: Word8 -> VM (Ref Value)
 
 runVM :: Code -> VM () -> Eff ()
 runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
@@ -223,13 +245,11 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
         k v s
 
       -- Get/Set-Slot are wrt to the base
-      GetSlot i -> \k -> do
+      GetSlotRef i -> \k -> do
         let State{stack,base} = s
-        let v = maybe (error "GetSlot") id $ Map.lookup (base+i) stack
-        k v s
-      SetSlot i v -> \k -> do
-        let State{stack,base} = s
-        k () s { stack = Map.insert (base+i) v stack }
+        case maybe (error "GetSlot") id $ Map.lookup (base+i) stack of
+          VRef r -> k r s
+          _ -> error "GetSlotRef/not-ref"
 
       GetConstNum i -> \k -> do
         if fromIntegral i >= length numbers then error (show ("GetConstNum",i)) else do
@@ -243,11 +263,13 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
           k v s
       Fetch -> \k -> do
         let State{ip} = s
+        --Runtime.Print(show("Fetch",ip))
         if ip >= progSize then k Nothing s else do
           let posAndOp = chunk !! ip
           k (Just posAndOp) s { ip = ip + 1 }
       FetchArg -> \k -> do
         let State{ip} = s
+        --Runtime.Print(show("FetchArg",ip))
         case chunk !! ip of
           (_,OP.ARG i) -> k i s { ip = ip + 1 }
           _ -> error "FetchArg"
@@ -289,28 +311,24 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       SetUps ups -> \k -> do
         k () s { ups }
 
-      GetUpValue i -> \k -> do
+      GetUpValueRef i -> \k -> do
         let State{ups} = s
-        let v = ups !! (fromIntegral i)
-        k v s
-
-      SetUpValue i v -> \k -> do
-        -- TODO: need up-values be a list of Ref Value
-        undefined i v k
+        let r = ups !! (fromIntegral i)
+        k r s
 
 data State = State
   { ip :: Int
   , stack :: Map Word8 Value
   , depth :: Word8
   , base :: Word8
-  , ups :: [Value]
+  , ups :: [Ref Value]
   , callStack :: [CallFrame]
   }
 
 state0 :: State
 state0 = State { ip = 0, stack = Map.empty, depth = 0, base = 0, ups = [], callStack = [] }
 
-data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8, prevUps :: [Value] }
+data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8, prevUps :: [Ref Value] }
 
 ----------------------------------------------------------------------
 -- copy and paste of primitive values and operations; add VCodePointer
@@ -320,8 +338,9 @@ data Value
   | VNumber Double
   | VString String
   | VFunc FuncDef
+  | VRef (Ref Value)
 
-data FuncDef = FuncDef  { codePointer :: Int, arity :: Word8, upValues :: [Value] }
+data FuncDef = FuncDef  { codePointer :: Int, arity :: Word8, upValues :: [Ref Value] }
 
 instance Show Value where
   show = \case
@@ -332,11 +351,13 @@ instance Show Value where
       if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
     VString s -> s
     VFunc{} -> "func"
+    VRef{} -> "ref"
 
 isTruthy :: Value -> Bool
 isTruthy = \case
   VNil -> False
   VBool b -> b
+  VRef{} -> undefined
   _ -> True
 
 vequal :: Value -> Value -> Bool
@@ -345,6 +366,8 @@ vequal v1 v2 = case (v1,v2) of
   (VBool b1, VBool b2) -> b1 == b2
   (VNumber n1, VNumber n2) -> n1 == n2
   (VString s1, VString s2) -> s1 == s2
+  (VRef{},_) -> undefined
+  (_,VRef{}) -> undefined
   _ -> False
 
 asNumber :: Pos -> String -> Value -> Eff Double

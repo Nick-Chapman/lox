@@ -30,6 +30,7 @@ data Op
   | GET_UPVALUE
   | SET_UPVALUE
   | CLOSURE
+  | INDIRECT
 
   | ARG Word8
   deriving Show

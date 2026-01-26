@@ -76,6 +76,7 @@ compStatThen env = \case
 
   SVarDecl x e -> \k -> do
     compExp e
+    Emit OP.INDIRECT
     k (insertEnv x env)
     Emit OP.POP
 
@@ -99,6 +100,7 @@ compStatThen env = \case
     Emit OP.NIL
     Emit OP.RETURN
     after <- Here
+    Emit OP.INDIRECT
     k (insertEnv fname env)
 
   SClassDecl{} -> do undefined
@@ -192,7 +194,8 @@ compStatThen env = \case
 
       ECall pos func args -> do
         compExp func
-        sequence_ [ compExp arg | arg <- args ]
+        Emit OP.INDIRECT
+        sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
         Position pos $ Emit OP.CALL
         Emit (OP.ARG (fromIntegral $ length args))
 
