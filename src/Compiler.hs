@@ -13,23 +13,12 @@ import OP (Op)
 import OP qualified
 import Pos (Pos,initPos)
 import Text.Printf (printf)
+import Data.Set qualified as Set
+import Data.Set (Set,(\\),union,singleton)
+
 
 compile :: [Stat] -> Either (Pos,String) Code
 compile decls = runAsm (compStats emptyEnv decls)
-
-data Env = Env { d :: Word8, m :: Map String Word8 }
-
-emptyEnv :: Env
-emptyEnv = Env { d = 0, m = Map.empty }
-
-insertEnv :: Identifier -> Env -> Env
-insertEnv Identifier{name} Env{d,m} =
-  Env {d = d+1, m = Map.insert name d m}
-
-lookupEnv :: Pos -> String -> Env -> Asm Word8
-lookupEnv pos name Env{m} =
-  maybe err pure $ Map.lookup name m
-  where err = do Error pos (printf "Undefined variable '%s'." $ name); pure 0
 
 compStats :: Env -> [Stat] -> Asm ()
 compStats env = \case
@@ -96,13 +85,17 @@ compStatThen env = \case
       Just exp -> compExp exp
     Emit OP.RETURN
 
-  SFunDecl Func{name=fname,formals,statements} -> \k -> mdo
-    Emit OP.CONSTANT_FUNC
+  SFunDecl func@Func{name=fname,formals,statements} -> \k -> mdo
+    let free = Set.toList $ fvFunc func
+    Emit OP.CLOSURE
     Emit (OP.ARG (fromIntegral $ length formals))
     relativize def
+    Emit (OP.ARG (fromIntegral $ length free))
+    sequence_ [ emitCloseVar x | x <- free ]
     jump after
     def <- Here
-    compStats (foldl (flip insertEnv) emptyEnv (fname:formals)) statements
+    let subEnv = foldl (flip insertEnv) (frameEnv free) (fname:formals)
+    compStats subEnv statements
     Emit OP.NIL
     Emit OP.RETURN
     after <- Here
@@ -111,6 +104,17 @@ compStatThen env = \case
   SClassDecl{} -> do undefined
 
   where
+
+    emitCloseVar :: String -> Asm ()
+    emitCloseVar name = do
+      let pos = initPos
+      lookupEnv pos name env >>= \case
+        VLocal n -> do
+          Emit OP.GET_LOCAL
+          Emit (OP.ARG n)
+        VFrame n -> do
+          Emit OP.GET_UPVALUE
+          Emit (OP.ARG n)
 
     compExp :: Exp -> Asm ()
     compExp = \case
@@ -150,15 +154,23 @@ compStatThen env = \case
           GreaterEqual{} -> do Emit OP.LESS; Emit OP.NOT
 
       EVar Identifier{pos,name} -> do
-        n <- lookupEnv pos name env
-        Emit OP.GET_LOCAL
-        Emit (OP.ARG n)
+        lookupEnv pos name env >>= \case
+          VLocal n -> do
+            Emit OP.GET_LOCAL
+            Emit (OP.ARG n)
+          VFrame n -> do
+            Emit OP.GET_UPVALUE
+            Emit (OP.ARG n)
 
       EAssign Identifier{pos,name} e -> do
-        n <- lookupEnv pos name env
         compExp e
-        Emit OP.SET_LOCAL
-        Emit (OP.ARG n)
+        lookupEnv pos name env >>= \case
+          VLocal n -> do
+            Emit OP.SET_LOCAL
+            Emit (OP.ARG n)
+          VFrame n -> do
+            Emit OP.SET_UPVALUE
+            Emit (OP.ARG n)
 
       ELogicalAnd e1 e2 -> mdo
         compExp e1
@@ -205,6 +217,86 @@ relativize a = do
       if dist < -128 then error "too far backward" else do
         let u = dist + 128 -- 0..255
         OP.ARG (fromIntegral u)
+
+----------------------------------------------------------------------
+-- environment
+
+data Var = VLocal Word8 | VFrame Word8
+
+data Env = Env { d :: Word8, m :: Map String Var }
+
+emptyEnv :: Env
+emptyEnv = Env { d = 0, m = Map.empty }
+
+frameEnv :: [String] -> Env
+frameEnv xs = Env { d = 0, m = Map.fromList [ (x,VFrame n) | (n,x) <- zip [0..] xs] }
+
+insertEnv :: Identifier -> Env -> Env
+insertEnv Identifier{name} Env{d,m} =
+  Env {d = d+1, m = Map.insert name (VLocal d) m}
+
+lookupEnv :: Pos -> String -> Env -> Asm Var
+lookupEnv pos name Env{m} =
+  maybe err pure $ Map.lookup name m
+  where err = do Error pos (printf "Undefined variable '%s'." $ name); pure (VLocal 255)
+
+----------------------------------------------------------------------
+-- free-var calculation
+
+type IdSet = Set String
+
+fvExp :: Exp -> IdSet
+fvExp = \case
+  EGrouping e -> fvExp e
+  ELit{} -> Set.empty
+  EUnary _pos _op e  -> fvExp e
+  EBinary _pos e1 _op e2 ->  fvExp e1 `union` fvExp e2
+  EVar Identifier{name} -> Set.singleton name
+  EAssign Identifier{name} e -> Set.singleton name `union` fvExp e
+  ELogicalAnd e1 e2 -> undefined e1 e2
+  ELogicalOr e1 e2 -> undefined e1 e2
+  ECall _pos func args -> Set.unions [ fvExp e | e <- func:args ]
+  EThis{} -> undefined
+  ESuperVar{} -> undefined
+  EGetProp{} -> undefined
+  ESetProp{} -> undefined
+
+fvStats :: [Stat] -> IdSet
+fvStats = \case
+  [] -> Set.empty
+  s:ss -> fvStatThen s (fvStats ss)
+
+fvStatThen :: Stat -> IdSet -> IdSet
+fvStatThen = \case
+  SClassDecl{} -> \k -> undefined k
+  SVarDecl Identifier{name} e -> \k -> fvExp e `union` (k \\ singleton name)
+  SFunDecl func@Func{name=Identifier{name=fname}} -> \k ->
+    fvFunc func `union` (k \\ singleton fname)
+  s ->
+    \k -> fvStat s `union` k
+
+fvStat :: Stat -> IdSet
+fvStat = \case
+  SPrint e -> fvExp e
+  SExp e -> fvExp e
+  SBlock stats -> fvStats stats
+  SIf cond s1 s2 -> Set.unions [ fvExp cond, fvStat s1, fvStat s2 ]
+  SWhile cond stat -> fvExp cond `union` fvStat stat
+  SFor (init,cond,update) body -> do
+    let deSugared = SBlock [ init , SWhile cond $ SBlock [body,update] ]
+    fvStat deSugared
+  SReturn _ Nothing ->  Set.empty
+  SReturn _ (Just e) -> fvExp e
+  SVarDecl{} -> error "fvStat/VarDecl"
+  SFunDecl{} -> error "fvStat/FunDecl"
+  SClassDecl{} -> error "fvStat/ClassDecl"
+
+fvFunc :: Func -> IdSet
+fvFunc Func{name=fname,formals,statements} =
+  fvStats statements \\ Set.fromList [ name | Identifier{name} <- fname:formals ]
+
+----------------------------------------------------------------------
+-- ASM
 
 instance Functor Asm where fmap = liftM
 instance Applicative Asm where pure = Ret; (<*>) = ap
@@ -289,4 +381,3 @@ insertTabS c constants@TabS{i,m} =
   case Map.lookup c m of
     Just i -> (constants,i)
     Nothing -> (TabS { i = i + 1, m = Map.insert c i m }, i)
-

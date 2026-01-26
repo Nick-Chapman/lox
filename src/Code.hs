@@ -70,4 +70,9 @@ encodeOp = c2w . \case
   OP.TRUE               -> 't'
   OP.CALL               -> 'C'
   OP.RETURN             -> 'R'
+
+  OP.CLOSURE            -> undefined 'X'
+  OP.GET_UPVALUE        -> undefined 'G'
+  OP.SET_UPVALUE        -> undefined 'S'
+
   OP.ARG byte           -> w2c byte

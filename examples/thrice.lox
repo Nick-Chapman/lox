@@ -1,0 +1,14 @@
+
+fun sub(x) {
+  return x-1;
+}
+
+fun thrice(f) {
+  fun thrice_f(x) {
+    return f(f(f(x)));
+  }
+  return thrice_f;
+}
+
+print thrice(thrice)(sub)(100);
+//print thrice(sub)(100);

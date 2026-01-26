@@ -26,5 +26,10 @@ data Op
   | TRUE
   | CALL
   | RETURN
+
+  | GET_UPVALUE
+  | SET_UPVALUE
+  | CLOSURE
+
   | ARG Word8
   deriving Show

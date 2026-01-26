@@ -11,8 +11,8 @@ deps-for-exe-under-test:
 
 my-lox.sh:
   #echo './lox.exe -tree $$@' >> $out
-  #echo './lox.exe -bci $$@' >> $out
-  echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out
+  echo './lox.exe -bci $$@' >> $out
+  #echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out
   chmod +x $out
 
 chapters:
@@ -35,11 +35,13 @@ groups:
 
 fullpath.list: @chapters
   cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|~/other/craftinginterpreters/|' > $out
-  #echo ./lambda.lox >> $out #  +1 = 240
-  echo ./fib-iter.lox >> $out #  +1 = 240
+  #echo ./lambda.lox >> $out
+  #echo ./fib-iter.lox >> $out
+  echo ./thrice.lox >> $out
 
 lambda.lox : ../examples/lambda.lox :
 fib-iter.lox : ../examples/fib-iter.lox :
+thrice.lox : ../examples/thrice.lox :
 
 rules : fullpath.list rules.sh #args-for-exe-under-test
   ./rules.sh < $in > $out

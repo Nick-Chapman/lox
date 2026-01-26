@@ -94,19 +94,21 @@ dispatch pos = \case
     arity <- FetchArg
     i <- FetchArg
     dest <- (+ (fromIntegral i - 128)) <$> GetIP
-    Push  $ VFunc FuncDef{ codePointer = dest, arity }
+    Push  $ VFunc FuncDef{ codePointer = dest, arity, upValues = [] }
 
   OP.CALL -> do
     nActuals <- FetchArg
     Peek (1+nActuals) >>= \case
-      VFunc FuncDef{codePointer=newIP,arity=nFormals} -> do
+      VFunc FuncDef{codePointer=newIP,arity=nFormals,upValues} -> do
         Effect (checkArity nFormals nActuals)
         prevIP <- GetIP
         prevBase <- GetBase
-        PushCallFrame CallFrame { prevIP, prevBase }
+        prevUps <- GetUps
+        PushCallFrame CallFrame { prevIP, prevBase, prevUps }
         d <- GetDepth
         SetBase (d - nActuals - 1)
         SetIP newIP
+        SetUps upValues
       _ -> do
         Effect (Runtime.Error pos "Can only call functions and classes.")
 
@@ -118,6 +120,32 @@ dispatch pos = \case
     SetBase prevBase
     SetDepth base
     Push res
+
+  OP.CLOSURE -> do
+    arity <- FetchArg
+    i <- FetchArg
+    dest <- (+ (fromIntegral i - 128)) <$> GetIP
+    n <- FetchArg
+    let
+      getClosedValue :: VM Value
+      getClosedValue = do
+        Fetch >>= \case
+          Nothing -> undefined
+          Just (pos,op) -> do
+            dispatch pos op
+            Pop
+    upValues :: [Value] <- sequence $ replicate (fromIntegral n) getClosedValue
+    Push $ VFunc FuncDef{ codePointer = dest, arity, upValues }
+
+  OP.GET_UPVALUE -> do
+    i <- FetchArg
+    v <- GetUpValue i
+    Push v
+
+  OP.SET_UPVALUE -> do
+    i <- FetchArg
+    v <- Peek 1
+    SetUpValue i v
 
   OP.ARG{} ->
     error "dispatch/OP_ARG"
@@ -164,6 +192,11 @@ data VM a where
   SetBase :: Word8 -> VM ()
   PushCallFrame :: CallFrame -> VM ()
   PopCallFrame :: VM CallFrame
+
+  GetUps :: VM [Value]
+  SetUps :: [Value] -> VM ()
+  GetUpValue :: Word8 -> VM Value
+  SetUpValue :: Word8 -> Value -> VM ()
 
 runVM :: Code -> VM () -> Eff ()
 runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
@@ -250,18 +283,34 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
           cf:callStack -> do
             k cf s { callStack }
 
+      GetUps -> \k -> do
+        let State{ups} = s
+        k ups s
+      SetUps ups -> \k -> do
+        k () s { ups }
+
+      GetUpValue i -> \k -> do
+        let State{ups} = s
+        let v = ups !! (fromIntegral i)
+        k v s
+
+      SetUpValue i v -> \k -> do
+        -- TODO: need up-values be a list of Ref Value
+        undefined i v k
+
 data State = State
   { ip :: Int
   , stack :: Map Word8 Value
   , depth :: Word8
   , base :: Word8
+  , ups :: [Value]
   , callStack :: [CallFrame]
   }
 
 state0 :: State
-state0 = State { ip = 0, stack = Map.empty, depth = 0, base = 0, callStack = [] }
+state0 = State { ip = 0, stack = Map.empty, depth = 0, base = 0, ups = [], callStack = [] }
 
-data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8 }
+data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8, prevUps :: [Value] }
 
 ----------------------------------------------------------------------
 -- copy and paste of primitive values and operations; add VCodePointer
@@ -272,7 +321,7 @@ data Value
   | VString String
   | VFunc FuncDef
 
-data FuncDef = FuncDef  { codePointer :: Int, arity :: Word8 }
+data FuncDef = FuncDef  { codePointer :: Int, arity :: Word8, upValues :: [Value] }
 
 instance Show Value where
   show = \case
