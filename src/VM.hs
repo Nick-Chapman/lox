@@ -27,54 +27,59 @@ fetchDispatchLoop _i = do
 
 dispatch :: Pos -> Op -> VM ()
 dispatch pos = \case
-  OP.CONSTANT_NUM -> do
+  OP.NUMBER -> do
     i <- FetchArg
     v <- GetConstNum i
     Push v
-  OP.CONSTANT_STR -> do
+  OP.STRING -> do
     i <- FetchArg
     v <- GetConstStr i
     Push v
-
   OP.NIL -> Push VNil
   OP.TRUE -> Push (VBool True)
   OP.FALSE -> Push (VBool False)
-  OP.POP -> do _ <- PopStack; pure ()
 
+  OP.POP -> do
+    _ <- PopStack
+    pure ()
   OP.GET_LOCAL -> do
     i <- FetchArg
     r <- GetSlot i
     v <- Effect (ReadRef r)
     Push v
-
   OP.SET_LOCAL -> do
     i <- FetchArg
     v <- Peek
     r <- GetSlot i
+    Effect (WriteRef r v)
+  OP.GET_UPVALUE -> do
+    i <- FetchArg
+    r <- GetUpValue i
+    v <- Effect (ReadRef r)
+    Push v
+  OP.SET_UPVALUE -> do
+    i <- FetchArg
+    v <- Peek
+    r <- GetUpValue i
     Effect (WriteRef r v)
 
   OP.EQUAL -> do
     v2 <- Pop
     v1 <- Pop
     Push (VBool (vequal v1 v2))
-
   OP.GREATER -> execBinary VBool (>)
   OP.LESS -> execBinary VBool (<)
-
   OP.ADD -> do
     v2 <- Pop
     v1 <- Pop
     v <- Effect (vadd pos (v1,v2))
     Push v
-
   OP.SUBTRACT -> execBinary VNumber (-)
   OP.MULTIPLY -> execBinary VNumber (*)
   OP.DIVIDE -> execBinary VNumber (/)
-
   OP.NOT -> do
     v <- Pop
     Push (VBool (not (isTruthy v)))
-
   OP.NEGATE -> do
     v <- Pop
     v' <- Effect (vnegate pos v)
@@ -83,11 +88,9 @@ dispatch pos = \case
   OP.PRINT -> do
     v <- Pop
     Effect (Runtime.Print (show v))
-
   OP.JUMP -> do
     i <- FetchArg
     ModIP (+ (fromIntegral i - 128)) -- TODO: share the 128 hack
-
   OP.JUMP_IF_FALSE -> do
     i <- FetchArg
     v <- Peek
@@ -110,16 +113,6 @@ dispatch pos = \case
       _v -> do
         Effect (Runtime.Error pos "Can only call functions and classes.")
 
-  OP.RETURN -> do
-    res <- Pop
-    base <- GetBase
-    CallFrame { prevIP, prevBase, prevUps } <- PopCallFrame
-    SetIP prevIP
-    SetBase prevBase
-    SetUps prevUps
-    SetDepth base
-    Push res
-
   OP.CLOSURE -> do
     arity <- FetchArg
     numUpvalues <- FetchArg
@@ -135,22 +128,20 @@ dispatch pos = \case
     upValues <- sequence $ replicate (fromIntegral numUpvalues) getClosedValue
     Push $ VFunc FuncDef{ codePointer = dest, arity, upValues }
 
-  OP.GET_UPVALUE -> do
-    i <- FetchArg
-    r <- GetUpValue i
-    v <- Effect (ReadRef r)
-    Push v
-
-  OP.SET_UPVALUE -> do
-    i <- FetchArg
-    v <- Peek
-    r <- GetUpValue i
-    Effect (WriteRef r v)
-
-  OP.ALLOC -> do
+  OP.INDIRECT -> do
     v <- Pop
     r <- Effect (NewRef v)
     PushStack (L r)
+
+  OP.RETURN -> do
+    res <- Pop
+    base <- GetBase
+    CallFrame { prevIP, prevBase, prevUps } <- PopCallFrame
+    SetIP prevIP
+    SetBase prevBase
+    SetUps prevUps
+    SetDepth base
+    Push res
 
   OP.ARG{} ->
     error "dispatch/OP_ARG"

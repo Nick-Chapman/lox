@@ -78,7 +78,7 @@ compStatThen env = \case
 
   SVarDecl x e -> \k -> do
     compExp e
-    Emit OP.ALLOC
+    Emit OP.INDIRECT
     k (insertEnv x env)
     Emit OP.POP
 
@@ -102,7 +102,7 @@ compStatThen env = \case
     Emit OP.NIL
     Emit OP.RETURN
     after <- Here
-    Emit OP.ALLOC
+    Emit OP.INDIRECT
     k (insertEnv fname env)
     Emit OP.POP
 
@@ -128,13 +128,13 @@ compStatThen env = \case
       ELit lit -> case lit of
         LNumber n -> do
           i <- EmitConstNum n
-          Emit OP.CONSTANT_NUM
+          Emit OP.NUMBER
           Emit (OP.ARG i)
         LNil{} -> Emit OP.NIL
         LBool b -> Emit (if b then OP.TRUE else OP.FALSE)
         LString str -> do
           i <- EmitConstStr str
-          Emit OP.CONSTANT_STR
+          Emit OP.STRING
           Emit (OP.ARG i)
 
       EUnary pos op e  -> do
@@ -197,8 +197,8 @@ compStatThen env = \case
 
       ECall pos func args -> do
         compExp func
-        Emit OP.ALLOC
-        sequence_ [ do compExp arg; Emit OP.ALLOC | arg <- args ]
+        Emit OP.INDIRECT
+        sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
         Position pos $ Emit OP.CALL
         Emit (OP.ARG (fromIntegral $ length args))
 

@@ -38,6 +38,47 @@ char* readFile(const char* path, size_t* fileSize) {
 }
 
 //////////////////////////////////////////////////////////////////////
+// op code
+
+typedef enum {
+
+  OP_HALT               = '\0', // TODO avoid
+
+  OP_NUMBER             = 'c',
+  OP_STRING             = '"',
+  OP_NIL                = 'n',
+  OP_TRUE               = 't',
+  OP_FALSE              = 'f',
+
+  OP_POP                = 'd',
+  OP_GET_LOCAL          = 'g',
+  OP_SET_LOCAL          = 's',
+  OP_GET_UPVALUE        = 'G',
+  OP_SET_UPVALUE        = 'S',
+
+  OP_EQUAL              = '=',
+  OP_GREATER            = '>',
+  OP_LESS               = '<',
+  OP_ADD                = '+',
+  OP_SUBTRACT           = '-',
+  OP_MULTIPLY           = '*',
+  OP_DIVIDE             = '/',
+  OP_NOT                = '!',
+  OP_NEGATE             = '~',
+
+  OP_PRINT              = 'p',
+  OP_JUMP               = 'j',
+  OP_JUMP_IF_FALSE      = 'b',
+  //OP_LOOP
+
+  OP_CALL               = 'C',
+  OP_CLOSURE            = 'F',
+  OP_INDIRECT           = 'I',
+  OP_RETURN             = 'R',
+
+} OpCode;
+
+//////////////////////////////////////////////////////////////////////
 // Value representation
 
 typedef enum {
@@ -315,7 +356,7 @@ typedef struct {
 
 void runtime_error(char* mes) {
   printf("%s\n[line 1] in script\n", mes); // TODO: print real backtrace
-  exit(1); // TODO: what code?
+  exit(1); // TODO: what exit code?
 }
 
 void run_code(Code code) {
@@ -340,22 +381,22 @@ void run_code(Code code) {
   for (;;step++) {
 
     //printStack(stack,sp);
-    char c = *ip;
+    OpCode c = *ip;
     //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c); fflush(stdout);
     ip++;
 
     switch (c) {
-    case '\0': { // TOOD: better to test ip has reached a point past the last instruction
+    case OP_HALT: { // TOOD: better to test ip has reached a point past the last instruction
       return;
     }
-    case 'c': {
+    case OP_NUMBER: {
       u8 i = *ip++;
       double d = code.doubles[i];
       Value res = ValueOfDouble(d);
       PUSH(res);
       break;
     }
-    case '"': {
+    case OP_STRING: {
       u8 i = *ip++;
       u16 length = code.string_length[i];
       char* payload = code.string_payload[i];
@@ -364,59 +405,69 @@ void run_code(Code code) {
       PUSH(res);
       break;
     }
-
-    case 'g': {
+    case OP_NIL: {
+      Value res = ValueNil;
+      PUSH(res);
+      break;
+    }
+    case OP_TRUE: {
+      Value res = ValueOfBool(true);
+      PUSH(res);
+      break;
+    }
+    case OP_FALSE: {
+      Value res = ValueOfBool(false);
+      PUSH(res);
+      break;
+    }
+    case OP_POP: {
+      --sp;
+      break;
+    }
+    case OP_GET_LOCAL: {
       u8 arg = *ip++;
       Value value = AsIndirection(base[arg])->value;
       PUSH(value);
       break;
     }
-    case 's': {
+    case OP_SET_LOCAL: {
       u8 arg = *ip++;
       Value value = sp[-1]; //peek
       AsIndirection(base[arg])->value = value;
       break;
     }
-
-    case 'b': { // JUMP_IF_FALSE
+    case OP_GET_UPVALUE: {
       u8 arg = *ip++;
-      int dist = (int)arg - 128;
-      Value v = sp[-1]; //peek
-      bool taken = !isTruthy(v);
-      if (taken) ip+=dist;
+      Value value = AsIndirection(up_values[arg])->value;
+      PUSH(value);
       break;
     }
-
-    case 'j': { // JUMP
+    case OP_SET_UPVALUE: {
       u8 arg = *ip++;
-      int dist = (int)arg - 128;
-      ip+=dist;
+      Value value = sp[-1]; //peek
+      AsIndirection(up_values[arg])->value = value;
       break;
     }
-
-    case 'p': {
-      printValue(POP);
-      putchar('\n');
+    case OP_EQUAL: {
+      Value b = POP; // TODO: avoid pop/pop/push
+      Value a = POP;
+      Value res = ValueOfBool (eqValue(a,b));
+      PUSH(res);
       break;
     }
-    case 'd': {
-      --sp;
-      break;
+#define COMPARE(op) { \
+      Value b = POP; \
+      Value a = POP; \
+      if (!(IsDouble(a) && IsDouble(b))) { \
+        runtime_error("Operands must be numbers."); \
+      } \
+      Value res = ValueOfBool (AsDouble(a) op AsDouble(b)); \
+      PUSH(res); \
     }
-    case '~': {
-      Value a = sp[-1];
-      if (!IsDouble(a)) {
-        runtime_error("Operand must be a number.");
-      }
-      sp[-1] = ValueOfDouble(- AsDouble(a));
-      break;
-    }
-    case '!': {
-      Value a = sp[-1];
-      sp[-1] = ValueOfBool(! isTruthy(a));
-      break;
-    }
-    case '+': {
+    case OP_GREATER: { COMPARE (>) break; }
+    case OP_LESS: { COMPARE (<) break; }
+#undef COMPARE
+    case OP_ADD: {
       Value b = POP;
       Value a = POP;
       if (IsDouble(a) && IsDouble(b)) {
@@ -430,7 +481,6 @@ void run_code(Code code) {
       }
       break;
     }
-
 #define BIN(op) { \
       Value b = POP; \
       Value a = POP; \
@@ -440,47 +490,64 @@ void run_code(Code code) {
       Value res = ValueOfDouble (AsDouble(a) op AsDouble(b)); \
       PUSH(res); \
     }
-
-    case '-': { BIN(-); break; }
-    case '*': { BIN(*); break; }
-    case '/': { BIN(/); break; }
-
-#define COMPARE(op) { \
-      Value b = POP; \
-      Value a = POP; \
-      if (!(IsDouble(a) && IsDouble(b))) { \
-        runtime_error("Operands must be numbers."); \
-      } \
-      Value res = ValueOfBool (AsDouble(a) op AsDouble(b)); \
-      PUSH(res); \
-    }
-
-    case '<': { COMPARE (<) break; }
-    case '>': { COMPARE (>) break; }
-
-    case '=': {
-      Value b = POP; // TODO: avoid pop/pop/push
-      Value a = POP;
-      Value res = ValueOfBool (eqValue(a,b));
-      PUSH(res);
+    case OP_SUBTRACT: { BIN(-); break; }
+    case OP_MULTIPLY: { BIN(*); break; }
+    case OP_DIVIDE: { BIN(/); break; }
+#undef BIN
+    case OP_NOT: {
+      Value a = sp[-1];
+      sp[-1] = ValueOfBool(! isTruthy(a));
       break;
     }
-    case 'f': {
-      Value res = ValueOfBool(false);
-      PUSH(res);
+    case OP_NEGATE: {
+      Value a = sp[-1];
+      if (!IsDouble(a)) {
+        runtime_error("Operand must be a number.");
+      }
+      sp[-1] = ValueOfDouble(- AsDouble(a));
       break;
     }
-    case 't': {
-      Value res = ValueOfBool(true);
-      PUSH(res);
+    case OP_PRINT: {
+      printValue(POP);
+      putchar('\n');
       break;
     }
-    case 'n': {
-      Value res = ValueNil;
-      PUSH(res);
+    case OP_JUMP: {
+      u8 arg = *ip++;
+      int dist = (int)arg - 128;
+      ip+=dist;
       break;
     }
-    case 'F': {
+    case OP_JUMP_IF_FALSE: {
+      u8 arg = *ip++;
+      int dist = (int)arg - 128;
+      Value v = sp[-1]; //peek
+      bool taken = !isTruthy(v);
+      if (taken) ip+=dist;
+      break;
+    }
+    case OP_CALL: {
+      u8 nActuals = *ip++;
+      Value callee0 = sp[-1-nActuals];
+      Value callee = AsIndirection(callee0)->value;
+      if (!IsFunc(callee)) {
+        runtime_error("Can only call functions and classes.");
+      }
+      ObjFunc* func = AsFunc(callee);
+      int nFormals = func->arity;
+      if (nActuals != nFormals) {
+        char buf[80];
+        sprintf(buf,"Expected %d arguments but got %d.",nFormals,nActuals);
+        runtime_error(buf);
+      }
+      CallFrame cf = { .ip = ip, .base = base, .up_values = up_values };
+      frames[frame_depth++] = cf;
+      base = sp - nActuals - 1;
+      ip = func->code;
+      up_values = func->up;
+      break;
+    }
+    case OP_CLOSURE: {
       u8 arity = *ip++;
       u8 num_up_values = *ip++;
       int dist = (int)(*ip++) - 128;
@@ -507,28 +574,13 @@ void run_code(Code code) {
       PUSH(res);
       break;
     }
-    case 'C': {
-      u8 nActuals = *ip++;
-      Value callee0 = sp[-1-nActuals];
-      Value callee = AsIndirection(callee0)->value;
-      if (!IsFunc(callee)) {
-        runtime_error("Can only call functions and classes.");
-      }
-      ObjFunc* func = AsFunc(callee);
-      int nFormals = func->arity;
-      if (nActuals != nFormals) {
-        char buf[80];
-        sprintf(buf,"Expected %d arguments but got %d.",nFormals,nActuals);
-        runtime_error(buf);
-      }
-      CallFrame cf = { .ip = ip, .base = base, .up_values = up_values };
-      frames[frame_depth++] = cf;
-      base = sp - nActuals - 1;
-      ip = func->code;
-      up_values = func->up;
+    case OP_INDIRECT: {
+      Value value = sp[-1];
+      Value res = ValueOfIndirection(makeIndirection(value));
+      sp[-1] = res;
       break;
     }
-    case 'R': {
+    case OP_RETURN: {
       Value res = POP;
       CallFrame cf = frames[--frame_depth];
       sp = base;
@@ -536,24 +588,6 @@ void run_code(Code code) {
       base = cf.base;
       up_values = cf.up_values;
       PUSH(res);
-      break;
-    }
-    case 'A': {
-      Value value = sp[-1];
-      Value res = ValueOfIndirection(makeIndirection(value));
-      sp[-1] = res;
-      break;
-    }
-    case 'G': {
-      u8 arg = *ip++;
-      Value value = AsIndirection(up_values[arg])->value;
-      PUSH(value);
-      break;
-    }
-    case 'S': {
-      u8 arg = *ip++;
-      Value value = sp[-1]; //peek
-      AsIndirection(up_values[arg])->value = value;
       break;
     }
     default:

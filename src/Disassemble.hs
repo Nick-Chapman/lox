@@ -47,14 +47,14 @@ data ArgDesc = N | D
 
 argsDescs :: Op -> [ArgDesc]
 argsDescs = \case
-  OP.CLOSURE -> [N,N,D]
+  OP.NUMBER -> [N]
+  OP.STRING -> [N]
   OP.SET_LOCAL -> [N]
   OP.GET_LOCAL -> [N]
   OP.GET_UPVALUE -> [N]
   OP.SET_UPVALUE -> [N]
-  OP.CALL -> [N]
-  OP.CONSTANT_NUM -> [N]
-  OP.CONSTANT_STR -> [N]
   OP.JUMP -> [D]
   OP.JUMP_IF_FALSE -> [D]
+  OP.CALL -> [N]
+  OP.CLOSURE -> [N,N,D]
   _op -> [] --error (show _op)
