@@ -13,8 +13,6 @@ typedef unsigned short u16;
 
 typedef enum {
 
-  OP_HALT               = '\0', // TODO avoid
-
   OP_NUMBER             = 'c',
   OP_STRING             = '"',
   OP_NIL                = 'n',
@@ -339,14 +337,14 @@ void run_code(Code code) {
 
   for (;;step++) {
 
+    if (ip == code.ip_end) return; // halt
+
     //print_stack(stack,sp);
     //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,*ip,*ip); fflush(stdout);
     OpCode op_code = *ip++;
 
     switch (op_code) {
-    case OP_HALT: { // TOOD: better to test ip has reached a point past the last instruction
-      return;
-    }
+
     case OP_NUMBER: {
       u8 arg = *ip++;
       double d = code.doubles[arg];
