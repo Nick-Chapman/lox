@@ -34,7 +34,7 @@ groups:
 # Tests are organized by chapter increments, or logical groups
 
 fullpath.list: @chapters
-  cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|~/other/craftinginterpreters/|' > $out
+  cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|/home/nic/other/craftinginterpreters/|' > $out
   #echo ./lambda.lox >> $out
   #echo ./fib-iter.lox >> $out
   echo ./thrice.lox >> $out
