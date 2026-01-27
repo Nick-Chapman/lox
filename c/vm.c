@@ -38,13 +38,50 @@ char* readFile(const char* path, size_t* fileSize) {
 }
 
 //////////////////////////////////////////////////////////////////////
+// Value representation
+
+typedef enum {
+  TNil,
+  TDouble,
+  TBool,
+  TString,
+  TFunc,
+} Typ;
+
+typedef struct value {
+  Typ typ;
+  union {
+    double number;
+    bool boolean;
+    struct ObjString* string;
+    struct ObjFunc* func;
+  } as;
+} Value;
+
+//////////////////////////////////////////////////////////////////////
+// (Obj) Func
+
+typedef struct ObjFunc {
+  u8 arity;
+  u8* code;
+  Value up[];
+} ObjFunc;
+
+ObjFunc* makeFunc(u8 arity, u8* code, u8 num_up_values) {
+  ObjFunc* func = malloc(sizeof(ObjFunc) + num_up_values * sizeof(Value)); // TODO: leak
+  func->arity = arity;
+  func->code = code;
+  return func;
+}
+
+//////////////////////////////////////////////////////////////////////
 // (Obj) String
 
 //typedef struct {
 //  int obj_size;
 //} Obj;
 
-typedef struct {
+typedef struct ObjString {
   //Obj obj;
   u16 length;
   char payload[];
@@ -52,7 +89,7 @@ typedef struct {
 
 ObjString* makeString(u16 length, char* payload) {
   //printf("makeString(%d,\"%s\")\n",length,payload);
-  ObjString* str = malloc(sizeof(u16) + length + 1); // TODO: leaks
+  ObjString* str = malloc(sizeof(u16) + length + 1); // TODO: leak
   str->length = length;
   memcpy(str->payload,payload,length+1);
   return str;
@@ -64,7 +101,7 @@ bool eqString(ObjString* s1, ObjString* s2) {
 }
 
 ObjString* concatString(ObjString* str1, ObjString* str2) {
-  ObjString* str = malloc(sizeof(u16) + str1->length + str2->length + 1); // TODO: leaks
+  ObjString* str = malloc(sizeof(u16) + str1->length + str2->length + 1); // TODO: leak
   str->length = str1->length + str2->length;
   memcpy(str->payload,               str1->payload,str1->length);
   memcpy(str->payload + str1->length,str2->payload,str2->length + 1);
@@ -72,41 +109,9 @@ ObjString* concatString(ObjString* str1, ObjString* str2) {
 }
 
 //////////////////////////////////////////////////////////////////////
-// (Obj) Func
+// Value constructors, discriminators and assessors.
 
-typedef struct {
-  u8 arity;
-  u8* code;
-} ObjFunc;
-
-ObjFunc* makeFunc(u8 arity, u8* code) {
-  ObjFunc* func = malloc(sizeof(ObjFunc)); // TODO: leaks
-  func->arity = arity;
-  func->code = code;
-  return func;
-}
-
-//////////////////////////////////////////////////////////////////////
-// Value representation
-
-typedef enum {
-  TBool = 71, // nothing should depend on details of runtime tag values
-  TDouble,
-  TNil,
-  TString,
-  TFunc,
-} Typ;
-
-typedef struct {
-  Typ typ;
-  union {
-    double number;
-    bool boolean;
-    ObjString* string;
-    ObjFunc* func;
-  } as;
-} Value;
-
+Value ValueNil = { .typ = TNil, .as = { .number = 999 } }; //never look at number;
 
 Value ValueOfDouble(double number) {
   return (Value) { .typ = TDouble, .as = { .number = number } };
@@ -120,9 +125,6 @@ Value ValueOfString(ObjString* string) {
 Value ValueOfFunc(ObjFunc* func) {
   return (Value) { .typ = TFunc, .as = { .func = func } };
 }
-
-
-Value ValueNil = { .typ = TNil, .as = { .number = 999 } }; //never look at number;
 
 
 bool IsNil(Value v) {
@@ -278,6 +280,7 @@ void printStack(Value* base, Value* top) {
 typedef struct {
   Value* base;
   u8* ip;
+  Value* up_values;
 } CallFrame;
 
 //////////////////////////////////////////////////////////////////////
@@ -299,6 +302,8 @@ void run_code(Code code) {
   CallFrame frames[100]; //TODO: check overflow
   int frame_depth = 0;
 
+  Value* up_values = 0;
+
 #define PUSH(d) (*sp++ = (d))
 #define POP (*--sp)
 
@@ -309,11 +314,12 @@ void run_code(Code code) {
   for (;;step++) {
 
     //printStack(stack,sp);
-    char c = *ip++;
+    char c = *ip;
     //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c); fflush(stdout);
+    ip++;
 
     switch (c) {
-    case '\0': {
+    case '\0': { // TOOD: better to test ip has reached a point past the last instruction
       return;
     }
     case 'c': {
@@ -427,7 +433,7 @@ void run_code(Code code) {
     case '>': { COMPARE (>) break; }
 
     case '=': {
-      Value b = POP;
+      Value b = POP; // TODO: avoid pop/pop/push
       Value a = POP;
       Value res = ValueOfBool (eqValue(a,b));
       PUSH(res);
@@ -450,9 +456,27 @@ void run_code(Code code) {
     }
     case 'F': {
       u8 arity = *ip++;
+      u8 num_up_values = *ip++;
       int dist = (int)(*ip++) - 128;
       u8* code = ip + dist;
-      ObjFunc* func = makeFunc(arity,code);
+      ObjFunc* func = makeFunc(arity,code,num_up_values);
+      for (int u = 0; u < num_up_values; u++) {
+        u8 mode = *ip++;
+        u8 arg = *ip++;
+        switch (mode) {
+        case 1: {
+          Value value = base[arg];
+          func->up[u] = value;
+          break;
+        }
+        case 2: {
+          Value value = up_values[arg];
+          func->up[u] = value;
+          break;
+        }
+        default: { printf("unknown closure mode: %d\n",mode); exit(1); }
+        }
+      }
       Value res = ValueOfFunc(func);
       PUSH(res);
       break;
@@ -470,10 +494,11 @@ void run_code(Code code) {
         sprintf(buf,"Expected %d arguments but got %d.",nFormals,nActuals);
         runtime_error(buf);
       }
-      CallFrame cf = { .ip = ip, .base = base };
+      CallFrame cf = { .ip = ip, .base = base, .up_values = up_values };
       frames[frame_depth++] = cf;
       base = sp - nActuals - 1;
       ip = func->code;
+      up_values = func->up;
       break;
     }
     case 'R': {
@@ -482,7 +507,24 @@ void run_code(Code code) {
       sp = base;
       ip = cf.ip;
       base = cf.base;
+      up_values = cf.up_values;
       PUSH(res);
+      break;
+    }
+    case 'A': { //TODO
+      //printf("OP.ALLOC\n");
+      break;
+    }
+    case 'G': {
+      u8 arg = *ip++;
+      Value value = up_values[arg];
+      PUSH(value);
+      break;
+    }
+    case 'S': {
+      u8 arg = *ip++;
+      Value value = sp[-1]; //peek
+      up_values[arg] = value;
       break;
     }
     default:

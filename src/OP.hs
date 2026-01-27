@@ -6,7 +6,6 @@ data Op
   = ADD
   | CONSTANT_NUM
   | CONSTANT_STR
-  | CONSTANT_FUNC
   | DIVIDE
   | EQUAL
   | FALSE

@@ -93,12 +93,6 @@ dispatch pos = \case
     v <- Peek
     if isTruthy v then pure () else ModIP (+ (fromIntegral i - 128))
 
-  OP.CONSTANT_FUNC -> do
-    arity <- FetchArg
-    i <- FetchArg
-    dest <- (+ (fromIntegral i - 128)) <$> GetIP
-    Push  $ VFunc FuncDef{ codePointer = dest, arity, upValues = [] }
-
   OP.CALL -> do
     nActuals <- FetchArg
     r <- PeekSlot (1+nActuals)
