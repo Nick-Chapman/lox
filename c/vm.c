@@ -46,6 +46,7 @@ typedef enum {
   TBool,
   TString,
   TFunc,
+  TIndirection,
 } Typ;
 
 typedef struct value {
@@ -55,8 +56,23 @@ typedef struct value {
     bool boolean;
     struct ObjString* string;
     struct ObjFunc* func;
+    struct ObjIndirection* indirection;
   } as;
 } Value;
+
+
+//////////////////////////////////////////////////////////////////////
+// (Obj) Indirection
+
+typedef struct ObjIndirection {
+  Value value;
+} ObjIndirection;
+
+ObjIndirection* makeIndirection(Value value) {
+  ObjIndirection* indirection = malloc(sizeof(ObjIndirection)); // TODO: leak
+  indirection->value = value;
+  return indirection;
+}
 
 //////////////////////////////////////////////////////////////////////
 // (Obj) Func
@@ -125,6 +141,9 @@ Value ValueOfString(ObjString* string) {
 Value ValueOfFunc(ObjFunc* func) {
   return (Value) { .typ = TFunc, .as = { .func = func } };
 }
+Value ValueOfIndirection(ObjIndirection* indirection) {
+  return (Value) { .typ = TIndirection, .as = { .indirection = indirection } };
+}
 
 
 bool IsNil(Value v) {
@@ -141,6 +160,9 @@ bool IsString(Value v) {
 }
 bool IsFunc(Value v) {
   return v.typ == TFunc;
+}
+bool IsIndirection(Value v) {
+  return v.typ == TIndirection;
 }
 
 
@@ -159,6 +181,10 @@ ObjString* AsString(Value v) {
 ObjFunc* AsFunc(Value v) {
   assert(IsFunc(v));
   return v.as.func;
+}
+ObjIndirection* AsIndirection(Value v) {
+  assert(IsIndirection(v));
+  return v.as.indirection;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -340,22 +366,22 @@ void run_code(Code code) {
     }
 
     case 'g': {
-      u8 i = *ip++;
-      Value res = base[i];
-      PUSH(res);
+      u8 arg = *ip++;
+      Value value = AsIndirection(base[arg])->value;
+      PUSH(value);
       break;
     }
     case 's': {
-      u8 i = *ip++;
-      Value res = sp[-1]; // peek
-      base[i] = res;
+      u8 arg = *ip++;
+      Value value = sp[-1]; //peek
+      AsIndirection(base[arg])->value = value;
       break;
     }
 
     case 'b': { // JUMP_IF_FALSE
       u8 arg = *ip++;
       int dist = (int)arg - 128;
-      Value v = sp[-1];
+      Value v = sp[-1]; //peek
       bool taken = !isTruthy(v);
       if (taken) ip+=dist;
       break;
@@ -483,11 +509,12 @@ void run_code(Code code) {
     }
     case 'C': {
       u8 nActuals = *ip++;
-      Value f = sp[-1-nActuals];
-      if (!IsFunc(f)) {
+      Value callee0 = sp[-1-nActuals];
+      Value callee = AsIndirection(callee0)->value;
+      if (!IsFunc(callee)) {
         runtime_error("Can only call functions and classes.");
       }
-      ObjFunc* func = AsFunc(f);
+      ObjFunc* func = AsFunc(callee);
       int nFormals = func->arity;
       if (nActuals != nFormals) {
         char buf[80];
@@ -511,20 +538,22 @@ void run_code(Code code) {
       PUSH(res);
       break;
     }
-    case 'A': { //TODO
-      //printf("OP.ALLOC\n");
+    case 'A': {
+      Value value = sp[-1];
+      Value res = ValueOfIndirection(makeIndirection(value));
+      sp[-1] = res;
       break;
     }
     case 'G': {
       u8 arg = *ip++;
-      Value value = up_values[arg];
+      Value value = AsIndirection(up_values[arg])->value;
       PUSH(value);
       break;
     }
     case 'S': {
       u8 arg = *ip++;
       Value value = sp[-1]; //peek
-      up_values[arg] = value;
+      AsIndirection(up_values[arg])->value = value;
       break;
     }
     default:
