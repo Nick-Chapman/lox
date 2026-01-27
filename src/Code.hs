@@ -72,6 +72,6 @@ encodeOp = c2w . \case
   OP.CLOSURE            -> undefined 'X'
   OP.GET_UPVALUE        -> undefined 'G'
   OP.SET_UPVALUE        -> undefined 'S'
-  OP.INDIRECT           -> undefined 'I'
+  OP.ALLOC              -> undefined 'A'
 
   OP.ARG byte           -> w2c byte

@@ -50,13 +50,15 @@ compStatThen env = \case
 
   SIf cond s1 s2 -> \k -> mdo
     compExp cond
-    jumpIfFalse afterThen
-    compStat env s1
-    jump afterElse
-    afterThen <- Here
-    compStat env s2
-    afterElse <- Here
+    jumpIfFalse elseBranch
+    -- thenBranch:
     Emit OP.POP
+    compStat env s1
+    jump rejoin
+    elseBranch <- Here
+    Emit OP.POP
+    compStat env s2
+    rejoin <- Here
     k env
 
   SWhile cond stat -> \k -> mdo
@@ -76,7 +78,7 @@ compStatThen env = \case
 
   SVarDecl x e -> \k -> do
     compExp e
-    Emit OP.INDIRECT
+    Emit OP.ALLOC
     k (insertEnv x env)
     Emit OP.POP
 
@@ -100,8 +102,9 @@ compStatThen env = \case
     Emit OP.NIL
     Emit OP.RETURN
     after <- Here
-    Emit OP.INDIRECT
+    Emit OP.ALLOC
     k (insertEnv fname env)
+    -- Emit OP.POP -- TODO: this missing is a bug
 
   SClassDecl{} -> do undefined
 
@@ -194,8 +197,8 @@ compStatThen env = \case
 
       ECall pos func args -> do
         compExp func
-        Emit OP.INDIRECT
-        sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
+        Emit OP.ALLOC
+        sequence_ [ do compExp arg; Emit OP.ALLOC | arg <- args ]
         Position pos $ Emit OP.CALL
         Emit (OP.ARG (fromIntegral $ length args))
 
