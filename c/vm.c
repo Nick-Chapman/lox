@@ -8,37 +8,8 @@
 typedef unsigned char u8;
 typedef unsigned short u16;
 
-char* readFile(const char* path, size_t* fileSize) {
-  FILE* file = fopen(path, "rb");
-  if (file == NULL) {
-    fprintf(stderr, "Could not open file \"%s\".\n", path);
-    exit(74);
-  }
-
-  fseek(file, 0L, SEEK_END);
-  *fileSize = ftell(file);
-  rewind(file);
-
-  char* buffer = (char*)malloc(*fileSize + 1);
-  if (buffer == NULL) {
-    fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
-    exit(74);
-  }
-
-  size_t bytesRead = fread(buffer, sizeof(char), *fileSize, file);
-  if (bytesRead < *fileSize) {
-    fprintf(stderr, "Could not read file \"%s\".\n", path);
-    exit(74);
-  }
-
-  buffer[bytesRead] = '\0';
-
-  fclose(file);
-  return buffer;
-}
-
 //////////////////////////////////////////////////////////////////////
-// op code
+// OpCode
 
 typedef enum {
 
@@ -78,15 +49,16 @@ typedef enum {
 
 } OpCode;
 
+
 //////////////////////////////////////////////////////////////////////
-// Value representation
+// Typ, Value
 
 typedef enum {
   TNil,
   TDouble,
   TBool,
   TString,
-  TFunc,
+  TClosure,
   TIndirection,
 } Typ;
 
@@ -96,14 +68,13 @@ typedef struct value {
     double number;
     bool boolean;
     struct ObjString* string;
-    struct ObjFunc* func;
+    struct ObjClosure* closure;
     struct ObjIndirection* indirection;
   } as;
 } Value;
 
-
 //////////////////////////////////////////////////////////////////////
-// (Obj) Indirection
+// ObjIndirection
 
 typedef struct ObjIndirection {
   Value value;
@@ -116,36 +87,30 @@ ObjIndirection* makeIndirection(Value value) {
 }
 
 //////////////////////////////////////////////////////////////////////
-// (Obj) Func
+// ObjClosure
 
-typedef struct ObjFunc {
-  u8 arity;
+typedef struct ObjClosure {
+  u8 arity; // TODO: could be inlined in the code
   u8* code;
-  Value up[];
-} ObjFunc;
+  Value ups[]; // "up values"
+} ObjClosure;
 
-ObjFunc* makeFunc(u8 arity, u8* code, u8 num_up_values) {
-  ObjFunc* func = malloc(sizeof(ObjFunc) + num_up_values * sizeof(Value)); // TODO: leak
-  func->arity = arity;
-  func->code = code;
-  return func;
+ObjClosure* makeClosure(u8 arity, u8* code, u8 num_ups) {
+  ObjClosure* closure = malloc(sizeof(ObjClosure) + num_ups * sizeof(Value)); // TODO: leak
+  closure->arity = arity;
+  closure->code = code;
+  return closure;
 }
 
 //////////////////////////////////////////////////////////////////////
-// (Obj) String
-
-//typedef struct {
-//  int obj_size;
-//} Obj;
+// ObjString
 
 typedef struct ObjString {
-  //Obj obj;
   u16 length;
   char payload[];
 } ObjString;
 
 ObjString* makeString(u16 length, char* payload) {
-  //printf("makeString(%d,\"%s\")\n",length,payload);
   ObjString* str = malloc(sizeof(u16) + length + 1); // TODO: leak
   str->length = length;
   memcpy(str->payload,payload,length+1);
@@ -166,7 +131,7 @@ ObjString* concatString(ObjString* str1, ObjString* str2) {
 }
 
 //////////////////////////////////////////////////////////////////////
-// Value constructors, discriminators and assessors.
+// Value construction
 
 Value ValueNil = { .typ = TNil, .as = { .number = 999 } }; //never look at number;
 
@@ -176,16 +141,18 @@ Value ValueOfDouble(double number) {
 Value ValueOfBool(bool boolean) {
   return (Value) { .typ = TBool, .as = { .boolean = boolean } };
 }
-Value ValueOfString(ObjString* string) {
+Value ValueOfString(struct ObjString* string) {
   return (Value) { .typ = TString, .as = { .string = string } };
 }
-Value ValueOfFunc(ObjFunc* func) {
-  return (Value) { .typ = TFunc, .as = { .func = func } };
+Value ValueOfClosure(struct ObjClosure* closure) {
+  return (Value) { .typ = TClosure, .as = { .closure = closure } };
 }
-Value ValueOfIndirection(ObjIndirection* indirection) {
+Value ValueOfIndirection(struct ObjIndirection* indirection) {
   return (Value) { .typ = TIndirection, .as = { .indirection = indirection } };
 }
 
+//////////////////////////////////////////////////////////////////////
+// Value discrimination by type ("Is")
 
 bool IsNil(Value v) {
   return v.typ == TNil;
@@ -199,13 +166,15 @@ bool IsBool(Value v) {
 bool IsString(Value v) {
   return v.typ == TString;
 }
-bool IsFunc(Value v) {
-  return v.typ == TFunc;
+bool IsClosure(Value v) {
+  return v.typ == TClosure;
 }
 bool IsIndirection(Value v) {
   return v.typ == TIndirection;
 }
 
+//////////////////////////////////////////////////////////////////////
+// Value deconstruction by type ("As")
 
 double AsDouble(Value v) {
   assert(IsDouble(v));
@@ -215,23 +184,23 @@ bool AsBool(Value v) {
   assert(IsBool(v));
   return v.as.boolean;
 }
-ObjString* AsString(Value v) {
+struct ObjString* AsString(Value v) {
   assert(IsString(v));
   return v.as.string;
 }
-ObjFunc* AsFunc(Value v) {
-  assert(IsFunc(v));
-  return v.as.func;
+struct ObjClosure* AsClosure(Value v) {
+  assert(IsClosure(v));
+  return v.as.closure;
 }
-ObjIndirection* AsIndirection(Value v) {
+struct ObjIndirection* AsIndirection(Value v) {
   assert(IsIndirection(v));
   return v.as.indirection;
 }
 
 //////////////////////////////////////////////////////////////////////
-// Value operations
+// Value operations: print_value(), equal_value(), is_falsey()
 
-void printValue(Value v) {
+void print_value(Value v) {
   if (IsNil(v)) {
     printf("nil");
   } else if (IsDouble(v)) {
@@ -242,14 +211,17 @@ void printValue(Value v) {
   } else if (IsString(v)) {
     ObjString* str = AsString(v);
     printf("%.*s",str->length,str->payload);
-  } else if (IsFunc(v)) {
+  } else if (IsClosure(v)) {
     printf("<func>");
+  } else if (IsIndirection(v)) {
+    printf("&");
+    print_value(AsIndirection(v)->value);
   } else {
     printf("<unknown-value-type>");
   }
 }
 
-bool eqValue(Value a, Value b) {
+bool equal_value(Value a, Value b) {
   if (IsNil(a) && IsNil(b)) {
     return true;
   }
@@ -265,18 +237,18 @@ bool eqValue(Value a, Value b) {
   return false;
 }
 
-bool isTruthy(Value a) { // everything except nil/false
+bool is_falsey(Value a) { // just nil/false
   if (IsNil(a)) {
-    return false;
+    return true;
   }
   else if (IsBool(a)) {
-    return AsBool(a);
+    return !AsBool(a);
   }
-  return true;
+  return false;
 }
 
 //////////////////////////////////////////////////////////////////////
-// decode static program text: constants and bytecode
+// Decode static program text: constants and bytecode
 
 typedef struct {
   u8 num_doubles;
@@ -287,23 +259,6 @@ typedef struct {
   u8* ip_start;
   u8* ip_end;
 } Code;
-
-void show_code(Code code) {
-  printf("**#doubles = %d\n",code.num_doubles);
-  for (int i=0; i<code.num_doubles; i++) {
-    printf("**double[%d] = %g\n",i,code.doubles[i]);
-  }
-  printf("**#strings = %d\n",code.num_strings);
-  for (int i=0; i<code.num_strings; i++) {
-    printf("**string_length[%d] = %d\n",i,code.string_length[i]);
-  }
-  for (int i=0; i<code.num_strings; i++) {
-    printf("**string_payload[%d] = %s\n",i,code.string_payload[i]);
-  }
-  printf("**bytecode:");
-  for (u8* ip = code.ip_start; ip < code.ip_end; ip++) printf(" %02x",*ip);
-  printf("\n");
-}
 
 Code decode(char* contents, size_t size) {
   u8 num_doubles = contents[6];
@@ -330,36 +285,41 @@ Code decode(char* contents, size_t size) {
 }
 
 //////////////////////////////////////////////////////////////////////
+// DEBUG: print_stack()
 
-void printStack(Value* base, Value* top) {
+void print_stack(Value* base, Value* top) {
   int depth = top - base;
   printf("**stack(#%d):", depth);
   for (int i = 0; i < depth; i++) {
     putchar(' ');
-    printValue(base[i]);
+    print_value(base[i]);
   }
   printf("\n");
 }
 
 //////////////////////////////////////////////////////////////////////
-// Call frame
-
-typedef struct {
-  Value* base;
-  u8* ip;
-  Value* up_values;
-} CallFrame;
-
-//////////////////////////////////////////////////////////////////////
-// TODO: vm state in struct?
-// so can have sep functions for push/pop
+// runtime_error()
 
 void runtime_error(char* mes) {
   printf("%s\n[line 1] in script\n", mes); // TODO: print real backtrace
   exit(1); // TODO: what exit code?
 }
 
+//////////////////////////////////////////////////////////////////////
+// CallFrame
+
+typedef struct {
+  Value* base;
+  u8* ip;
+  Value* ups;
+} CallFrame;
+
+//////////////////////////////////////////////////////////////////////
+// run_code()
+
 void run_code(Code code) {
+
+  // TODO: move VM state into a struct
 
   int stack_size = 100; //TODO: check overflow
   Value stack[stack_size];
@@ -369,55 +329,53 @@ void run_code(Code code) {
   CallFrame frames[100]; //TODO: check overflow
   int frame_depth = 0;
 
-  Value* up_values = 0;
+  Value* ups = 0;
 
 #define PUSH(d) (*sp++ = (d))
 #define POP (*--sp)
 
   u8* ip = code.ip_start;
-
   int step = 0;
-  //printf("**EXECUTE...\n");
+
   for (;;step++) {
 
-    //printStack(stack,sp);
-    OpCode c = *ip;
-    //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,c,c); fflush(stdout);
-    ip++;
+    //print_stack(stack,sp);
+    //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,*ip,*ip); fflush(stdout);
+    OpCode op_code = *ip++;
 
-    switch (c) {
+    switch (op_code) {
     case OP_HALT: { // TOOD: better to test ip has reached a point past the last instruction
       return;
     }
     case OP_NUMBER: {
-      u8 i = *ip++;
-      double d = code.doubles[i];
-      Value res = ValueOfDouble(d);
-      PUSH(res);
+      u8 arg = *ip++;
+      double d = code.doubles[arg];
+      Value value = ValueOfDouble(d);
+      PUSH(value);
       break;
     }
     case OP_STRING: {
-      u8 i = *ip++;
-      u16 length = code.string_length[i];
-      char* payload = code.string_payload[i];
+      u8 arg = *ip++;
+      u16 length = code.string_length[arg];
+      char* payload = code.string_payload[arg];
       ObjString* string = makeString(length,payload);
-      Value res = ValueOfString(string);
-      PUSH(res);
+      Value value = ValueOfString(string);
+      PUSH(value);
       break;
     }
     case OP_NIL: {
-      Value res = ValueNil;
-      PUSH(res);
+      Value value = ValueNil;
+      PUSH(value);
       break;
     }
     case OP_TRUE: {
-      Value res = ValueOfBool(true);
-      PUSH(res);
+      Value value = ValueOfBool(true);
+      PUSH(value);
       break;
     }
     case OP_FALSE: {
-      Value res = ValueOfBool(false);
-      PUSH(res);
+      Value value = ValueOfBool(false);
+      PUSH(value);
       break;
     }
     case OP_POP: {
@@ -438,77 +396,77 @@ void run_code(Code code) {
     }
     case OP_GET_UPVALUE: {
       u8 arg = *ip++;
-      Value value = AsIndirection(up_values[arg])->value;
+      Value value = AsIndirection(ups[arg])->value;
       PUSH(value);
       break;
     }
     case OP_SET_UPVALUE: {
       u8 arg = *ip++;
       Value value = sp[-1]; //peek
-      AsIndirection(up_values[arg])->value = value;
+      AsIndirection(ups[arg])->value = value;
       break;
     }
     case OP_EQUAL: {
-      Value b = POP; // TODO: avoid pop/pop/push
-      Value a = POP;
-      Value res = ValueOfBool (eqValue(a,b));
-      PUSH(res);
+      Value v2 = POP; // TODO: avoid pop/pop/push
+      Value v1 = POP;
+      Value value = ValueOfBool (equal_value(v1,v2));
+      PUSH(value);
       break;
     }
 #define COMPARE(op) { \
-      Value b = POP; \
-      Value a = POP; \
-      if (!(IsDouble(a) && IsDouble(b))) { \
+      Value v2 = POP; \
+      Value v1 = POP; \
+      if (!(IsDouble(v1) && IsDouble(v2))) { \
         runtime_error("Operands must be numbers."); \
       } \
-      Value res = ValueOfBool (AsDouble(a) op AsDouble(b)); \
-      PUSH(res); \
+      Value value = ValueOfBool (AsDouble(v1) op AsDouble(v2)); \
+      PUSH(value); \
     }
     case OP_GREATER: { COMPARE (>) break; }
     case OP_LESS: { COMPARE (<) break; }
 #undef COMPARE
     case OP_ADD: {
-      Value b = POP;
-      Value a = POP;
-      if (IsDouble(a) && IsDouble(b)) {
-        Value res = ValueOfDouble (AsDouble(a) + AsDouble(b));
-        PUSH(res);
-      } else if (IsString(a) && IsString(b)) {
-        Value res = ValueOfString (concatString(AsString(a),AsString(b)));
-        PUSH(res);
+      Value v2 = POP;
+      Value v1 = POP;
+      if (IsDouble(v1) && IsDouble(v2)) {
+        Value value = ValueOfDouble (AsDouble(v1) + AsDouble(v2));
+        PUSH(value);
+      } else if (IsString(v1) && IsString(v2)) {
+        Value value = ValueOfString (concatString(AsString(v1),AsString(v2)));
+        PUSH(value);
       } else {
         runtime_error("Operands must be two numbers or two strings.");
       }
       break;
     }
 #define BIN(op) { \
-      Value b = POP; \
-      Value a = POP; \
-      if (!(IsDouble(a) && IsDouble(b))) { \
+      Value v2 = POP; \
+      Value v1 = POP; \
+      if (!(IsDouble(v1) && IsDouble(v2))) { \
         runtime_error("Operands must be numbers."); \
       } \
-      Value res = ValueOfDouble (AsDouble(a) op AsDouble(b)); \
-      PUSH(res); \
+      Value value = ValueOfDouble (AsDouble(v1) op AsDouble(v2)); \
+      PUSH(value); \
     }
     case OP_SUBTRACT: { BIN(-); break; }
     case OP_MULTIPLY: { BIN(*); break; }
     case OP_DIVIDE: { BIN(/); break; }
 #undef BIN
     case OP_NOT: {
-      Value a = sp[-1];
-      sp[-1] = ValueOfBool(! isTruthy(a));
+      Value v1 = sp[-1];
+      sp[-1] = ValueOfBool(is_falsey(v1));
       break;
     }
     case OP_NEGATE: {
-      Value a = sp[-1];
-      if (!IsDouble(a)) {
+      Value v1 = sp[-1];
+      if (!IsDouble(v1)) {
         runtime_error("Operand must be a number.");
       }
-      sp[-1] = ValueOfDouble(- AsDouble(a));
+      sp[-1] = ValueOfDouble(- AsDouble(v1));
       break;
     }
     case OP_PRINT: {
-      printValue(POP);
+      print_value(POP);
       putchar('\n');
       break;
     }
@@ -521,105 +479,117 @@ void run_code(Code code) {
     case OP_JUMP_IF_FALSE: {
       u8 arg = *ip++;
       int dist = (int)arg - 128;
-      Value v = sp[-1]; //peek
-      bool taken = !isTruthy(v);
+      Value value = sp[-1]; //peek
+      bool taken = is_falsey(value);
       if (taken) ip+=dist;
       break;
     }
     case OP_CALL: {
-      u8 nActuals = *ip++;
-      Value callee0 = sp[-1-nActuals];
-      Value callee = AsIndirection(callee0)->value;
-      if (!IsFunc(callee)) {
+      u8 num_actuals = *ip++;
+      Value callee = AsIndirection(sp[-1-num_actuals])->value;
+      if (!IsClosure(callee)) {
         runtime_error("Can only call functions and classes.");
       }
-      ObjFunc* func = AsFunc(callee);
-      int nFormals = func->arity;
-      if (nActuals != nFormals) {
+      ObjClosure* closure = AsClosure(callee);
+      int arity = closure->arity;
+      if (num_actuals != arity) {
         char buf[80];
-        sprintf(buf,"Expected %d arguments but got %d.",nFormals,nActuals);
+        sprintf(buf,"Expected %d arguments but got %d.",arity,num_actuals);
         runtime_error(buf);
       }
-      CallFrame cf = { .ip = ip, .base = base, .up_values = up_values };
+      CallFrame cf = { .ip = ip, .base = base, .ups = ups };
       frames[frame_depth++] = cf;
-      base = sp - nActuals - 1;
-      ip = func->code;
-      up_values = func->up;
+      base = sp - num_actuals - 1;
+      ip = closure->code;
+      ups = closure->ups;
       break;
     }
     case OP_CLOSURE: {
       u8 arity = *ip++;
-      u8 num_up_values = *ip++;
+      u8 num_ups = *ip++;
       int dist = (int)(*ip++) - 128;
       u8* code = ip + dist;
-      ObjFunc* func = makeFunc(arity,code,num_up_values);
-      for (int u = 0; u < num_up_values; u++) {
+      ObjClosure* closure = makeClosure(arity,code,num_ups);
+      for (int u = 0; u < num_ups; u++) {
         u8 mode = *ip++;
         u8 arg = *ip++;
         switch (mode) {
         case 1: {
           Value value = base[arg];
-          func->up[u] = value;
+          closure->ups[u] = value;
           break;
         }
         case 2: {
-          Value value = up_values[arg];
-          func->up[u] = value;
+          Value value = ups[arg];
+          closure->ups[u] = value;
           break;
         }
         default: { printf("unknown closure mode: %d\n",mode); exit(1); }
         }
       }
-      Value res = ValueOfFunc(func);
-      PUSH(res);
+      Value value = ValueOfClosure(closure);
+      PUSH(value);
       break;
     }
     case OP_INDIRECT: {
-      Value value = sp[-1];
-      Value res = ValueOfIndirection(makeIndirection(value));
-      sp[-1] = res;
+      Value v1 = sp[-1];
+      Value value = ValueOfIndirection(makeIndirection(v1));
+      sp[-1] = value;
       break;
     }
     case OP_RETURN: {
-      Value res = POP;
+      Value value = POP;
       CallFrame cf = frames[--frame_depth];
       sp = base;
       ip = cf.ip;
       base = cf.base;
-      up_values = cf.up_values;
-      PUSH(res);
+      ups = cf.ups;
+      PUSH(value);
       break;
     }
     default:
-      printf("unknown op: %02x ('%c')\n",c,c);
+      printf("unknown op: %02x ('%c')\n",op_code,op_code);
       exit(1);
     }
   }
 }
 
 //////////////////////////////////////////////////////////////////////
+// read_file()
 
-void debug_sizes() {
-  printf("**sizeof(u8)=%ld\n",sizeof(u8));
-  printf("**sizeof(u16)=%ld\n",sizeof(u16));
-  printf("**sizeof(Typ)=%ld\n",sizeof(Typ));
-  //printf("**sizeof(Obj)=%ld\n",sizeof(Obj));
-  printf("**sizeof(ObjString)=%ld\n",sizeof(ObjString));
-  printf("**sizeof(Value)=%ld\n",sizeof(Value));
+char* read_file(const char* path, size_t* fileSize) {
+  FILE* file = fopen(path, "rb");
+  if (file == NULL) {
+    fprintf(stderr, "Could not open file \"%s\".\n", path);
+    exit(74);
+  }
+  fseek(file, 0L, SEEK_END);
+  *fileSize = ftell(file);
+  rewind(file);
+  char* buffer = (char*)malloc(*fileSize + 1);
+  if (buffer == NULL) {
+    fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
+    exit(74);
+  }
+  size_t bytesRead = fread(buffer, sizeof(char), *fileSize, file);
+  if (bytesRead < *fileSize) {
+    fprintf(stderr, "Could not read file \"%s\".\n", path);
+    exit(74);
+  }
+  buffer[bytesRead] = '\0';
+  fclose(file);
+  return buffer;
 }
+
+//////////////////////////////////////////////////////////////////////
+// main()
 
 int main(int argc, char* argv[]) {
 
-  //printf("**argc=%d\n",argc);
-  //for (int i=0; i<argc; i++) printf("**argv[%d]=%s\n",i,argv[i]);
-  //debug_sizes();
-
   char* lox_file = argv[1];
   size_t lox_file_size;
-  char* contents = readFile(lox_file,&lox_file_size);
+  char* contents = read_file(lox_file,&lox_file_size);
 
   Code code = decode(contents,lox_file_size);
-  //show_code(code);
   run_code(code);
-  //printf("**done\n");
 }
