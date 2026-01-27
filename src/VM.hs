@@ -3,8 +3,6 @@ module VM (runCode) where
 import Code (Code(..))
 import Control.Monad (ap,liftM)
 import Data.List (isSuffixOf)
-import Data.Map (Map)
-import Data.Map qualified as Map
 import Data.Word (Word8)
 import OP (Op)
 import OP qualified
@@ -237,23 +235,23 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       Pop -> loop s (expectR <$> PopStack)
 
       PushStack lr -> \k -> do
-        let State{depth,stack} = s
-        k () s { depth = 1 + depth, stack = Map.insert depth lr stack }
+        let State{items} = s
+        k () s { items = lr : items }
 
       PopStack -> \k -> do
-        let State{depth,stack} = s
-        let lr = maybe (error "PopStack") id $ Map.lookup (depth-1) stack
-        k lr s { depth = depth - 1, stack = Map.delete (depth-1) stack }
+        let State{items} = s
+        let lr = items !! 0
+        k lr s { items = drop 1 items }
 
       PeekSlot n -> \k -> do
-        let State{depth,stack} = s
-        let ref = expectL $ maybe (error "PeekSlot") id $ Map.lookup (depth-n) stack
+        let State{items} = s
+        let ref = expectL (items !! fromIntegral (n-1))
         k ref s
 
       -- Get/Set are wrt to the base
       GetSlot i -> \k -> do
-        let State{stack,base} = s
-        let ref = expectL $ maybe (error "GetSlot") id $ Map.lookup (base+i) stack
+        let State{base,items} = s
+        let ref = expectL (reverse items !! (fromIntegral (base+i)))
         k ref s
 
       GetConstNum i -> \k -> do
@@ -288,10 +286,13 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
         k () s { ip }
 
       GetDepth -> \k -> do
-        let State{depth} = s
+        let State{items} = s
+        let depth = fromIntegral $ length items
         k depth s
       SetDepth depth -> \k -> do
-        k () s { depth }
+        let State{items} = s
+        let items' = drop (length items - fromIntegral depth) items
+        k () s { items = items' }
 
       GetBase -> \k -> do
         let State{base} = s
@@ -326,18 +327,19 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
 data State = State
   { ip :: Int
-  , stack :: Map Word8 LR -- TODO: use list (dont need map now have refs)
-  , depth :: Word8
+  , items :: [LR]
   , base :: Word8
   , ups :: [Ref Value]
   , callStack :: [CallFrame]
   }
 
+state0 :: State
+state0 = State { ip = 0, items = [], base = 0, ups = [], callStack = [] }
+
 instance Show State where
-  show State{callStack=_,stack,depth,base} = do
-    let items = [ maybe undefined id $ Map.lookup (i-1) stack | i <- [1..depth] ]
+  show State{callStack=_,base,items} = do
     --printf (show callStack) ++
-    printf "base=%d, depth=%d, stack: %s" base depth (show items)
+    printf "base=%d, stack: %s" base (show (reverse items))
 
 data LR = L (Ref Value) | R Value
 
@@ -352,9 +354,6 @@ instance Show LR where
   show = \case
     L{} -> "L"
     R v -> show v
-
-state0 :: State
-state0 = State { ip = 0, stack = Map.empty, depth = 0, base = 0, ups = [], callStack = [] }
 
 data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8, prevUps :: [Ref Value] }
 
