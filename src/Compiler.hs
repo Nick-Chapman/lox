@@ -104,7 +104,7 @@ compStatThen env = \case
     after <- Here
     Emit OP.ALLOC
     k (insertEnv fname env)
-    -- Emit OP.POP -- TODO: this missing is a bug
+    Emit OP.POP
 
   SClassDecl{} -> do undefined
 
