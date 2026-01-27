@@ -41,23 +41,19 @@ dispatch pos = \case
   OP.NIL -> Push VNil
   OP.TRUE -> Push (VBool True)
   OP.FALSE -> Push (VBool False)
-  OP.POP -> do _ <- PopLR; pure ()
+  OP.POP -> do _ <- PopStack; pure ()
 
   OP.GET_LOCAL -> do
     i <- FetchArg
-    GetSlotRef i >>= \case
-      R{} -> error "OP.GET_LOCAL/GetSlotRef"
-      L r -> do
-        v <- Effect (ReadRef r)
-        Push v
+    r <- GetSlot i
+    v <- Effect (ReadRef r)
+    Push v
 
   OP.SET_LOCAL -> do
     i <- FetchArg
-    v <- Peek 1
-    GetSlotRef i >>= \case
-      R{} -> error "OP.SET_LOCAL/GetSlotRef"
-      L r -> do
-        Effect (WriteRef r v)
+    v <- Peek
+    r <- GetSlot i
+    Effect (WriteRef r v)
 
   OP.EQUAL -> do
     v2 <- Pop
@@ -96,7 +92,7 @@ dispatch pos = \case
 
   OP.JUMP_IF_FALSE -> do
     i <- FetchArg
-    v <- Peek 1
+    v <- Peek
     if isTruthy v then pure () else ModIP (+ (fromIntegral i - 128))
 
   OP.CONSTANT_FUNC -> do
@@ -107,22 +103,20 @@ dispatch pos = \case
 
   OP.CALL -> do
     nActuals <- FetchArg
-    PeekLR (1+nActuals) >>= \case
-      R{} -> error "OP.CALL/PeekLR"
-      L r -> do
-        Effect (ReadRef r) >>= \case
-          VFunc FuncDef{codePointer=newIP,arity=nFormals,upValues} -> do
-            Effect (checkArity nFormals nActuals)
-            prevIP <- GetIP
-            prevBase <- GetBase
-            prevUps <- GetUps
-            PushCallFrame CallFrame { prevIP, prevBase, prevUps }
-            d <- GetDepth
-            SetBase (d - nActuals - 1)
-            SetIP newIP
-            SetUps upValues
-          _v -> do
-            Effect (Runtime.Error pos "Can only call functions and classes.")
+    r <- PeekSlot (1+nActuals)
+    Effect (ReadRef r) >>= \case
+      VFunc FuncDef{codePointer=newIP,arity=nFormals,upValues} -> do
+        Effect (checkArity nFormals nActuals)
+        prevIP <- GetIP
+        prevBase <- GetBase
+        prevUps <- GetUps
+        PushCallFrame CallFrame { prevIP, prevBase, prevUps }
+        d <- GetDepth
+        SetBase (d - nActuals - 1)
+        SetIP newIP
+        SetUps upValues
+      _v -> do
+        Effect (Runtime.Error pos "Can only call functions and classes.")
 
   OP.RETURN -> do
     res <- Pop
@@ -140,7 +134,7 @@ dispatch pos = \case
     off <- FetchArg
     dest <- (+ (fromIntegral off - 128)) <$> GetIP
     let
-      getClosedValue :: VM LR
+      getClosedValue :: VM (Ref Value)
       getClosedValue = do
         Fetch >>= \case
           Nothing -> error "getClosedValue"
@@ -148,10 +142,10 @@ dispatch pos = \case
             case op of
               OP.GET_LOCAL -> do -- TODO: use OP.ARG
                 i <- FetchArg
-                GetSlotRef i
+                GetSlot i
               OP.GET_UPVALUE -> do
                 i <- FetchArg
-                GetUpValueRef i
+                GetUpValue i
               _ ->
                 error (show (pos,"getClosedValue",op))
 
@@ -160,24 +154,20 @@ dispatch pos = \case
 
   OP.GET_UPVALUE -> do
     i <- FetchArg
-    GetUpValueRef i >>= \case
-      R{} -> error "OP.GET_UPVALUE/GetUpValueRef"
-      L r -> do
-        v <- Effect (ReadRef r)
-        Push v
+    r <- GetUpValue i
+    v <- Effect (ReadRef r)
+    Push v
 
   OP.SET_UPVALUE -> do
     i <- FetchArg
-    v <- Peek 1
-    GetUpValueRef i >>= \case
-      R{} -> error "OP.SET_UPVALUE/GetUpValueRef"
-      L r -> do
-        Effect (WriteRef r v)
+    v <- Peek
+    r <- GetUpValue i
+    Effect (WriteRef r v)
 
   OP.ALLOC -> do
     v <- Pop
     r <- Effect (NewRef v)
-    PushLR (L r)
+    PushStack (L r)
 
   OP.ARG{} ->
     error "dispatch/OP_ARG"
@@ -206,15 +196,15 @@ data VM a where
   Bind :: VM a -> (a -> VM b) -> VM b
   Effect :: Eff a -> VM a
 
+  Peek :: VM Value
   Push :: Value -> VM ()
-  PushLR :: LR -> VM ()
   Pop :: VM Value
-  PopLR :: VM LR
 
-  Peek :: Word8 -> VM Value -- TODO: imp as Pop/(re)Push
-  PeekLR :: Word8 -> VM LR -- TODO: always return Ref
+  PushStack :: LR -> VM ()
+  PopStack :: VM LR
 
-  GetSlotRef :: Word8 -> VM LR  -- TODO: always return Ref
+  PeekSlot :: Word8 -> VM (Ref Value)
+  GetSlot :: Word8 -> VM (Ref Value)
 
   GetConstNum :: Word8 -> VM Value
   GetConstStr :: Word8 -> VM Value
@@ -231,10 +221,10 @@ data VM a where
   PushCallFrame :: CallFrame -> VM ()
   PopCallFrame :: VM CallFrame
 
-  GetUps :: VM [LR]
-  SetUps :: [LR] -> VM ()
+  GetUps :: VM [Ref Value]
+  SetUps :: [Ref Value] -> VM ()
 
-  GetUpValueRef :: Word8 -> VM LR -- TODO: always return Ref
+  GetUpValue :: Word8 -> VM (Ref Value)
 
   DebugStack :: VM ()
 
@@ -251,38 +241,29 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       Effect eff -> \k -> do a <- eff; k a s
 
       -- Push/Pop/Peek are w.r.t the (sp) depth
-      Push v -> loop s (PushLR (R v))
-      PushLR lr -> \k -> do
+      Peek -> loop s (do v <- Pop; Push v; return v)
+      Push v -> loop s (PushStack (R v))
+      Pop -> loop s (expectR <$> PopStack)
+
+      PushStack lr -> \k -> do
         let State{depth,stack} = s
         k () s { depth = 1 + depth, stack = Map.insert depth lr stack }
 
-      Pop -> \k -> do
-        loop s PopLR $ \case
-          L{} -> error "Pop/L"
-          R v -> \s -> k v s
-
-      PopLR -> \k -> do
+      PopStack -> \k -> do
         let State{depth,stack} = s
-        let lr = maybe (error"PopLR") id $ Map.lookup (depth-1) stack
+        let lr = maybe (error "PopStack") id $ Map.lookup (depth-1) stack
         k lr s { depth = depth - 1, stack = Map.delete (depth-1) stack }
 
-      Peek n -> \k -> do
+      PeekSlot n -> \k -> do
         let State{depth,stack} = s
-        let lr = maybe (error"Peek") id $ Map.lookup (depth-n) stack
-        case lr of
-          L{} -> error "Peek/L"
-          R v -> k v s
+        let ref = expectL $ maybe (error "PeekSlot") id $ Map.lookup (depth-n) stack
+        k ref s
 
-      PeekLR n -> \k -> do
-        let State{depth,stack} = s
-        let lr = maybe (error"Peek") id $ Map.lookup (depth-n) stack
-        k lr s
-
-      -- Get/Set-Slot are wrt to the base
-      GetSlotRef i -> \k -> do
+      -- Get/Set are wrt to the base
+      GetSlot i -> \k -> do
         let State{stack,base} = s
-        let slot = maybe (error "GetSlot") id $ Map.lookup (base+i) stack
-        k slot s
+        let ref = expectL $ maybe (error "GetSlot") id $ Map.lookup (base+i) stack
+        k ref s
 
       GetConstNum i -> \k -> do
         if fromIntegral i >= length numbers then error (show ("GetConstNum",i)) else do
@@ -294,6 +275,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
           let v = case strings !! fromIntegral i of
                     str -> VString str
           k v s
+
       Fetch -> \k -> do
         let State{ip} = s
         if ip >= progSize then k Nothing s else do
@@ -342,7 +324,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       SetUps ups -> \k -> do
         k () s { ups }
 
-      GetUpValueRef i -> \k -> do
+      GetUpValue i -> \k -> do
         let State{ups} = s
         let r = ups !! (fromIntegral i)
         k r s
@@ -356,7 +338,7 @@ data State = State
   , stack :: Map Word8 LR -- TODO: use list (dont need map now have refs)
   , depth :: Word8
   , base :: Word8
-  , ups :: [LR]
+  , ups :: [Ref Value]
   , callStack :: [CallFrame]
   }
 
@@ -368,6 +350,13 @@ instance Show State where
 
 data LR = L (Ref Value) | R Value
 
+expectR :: LR -> Value
+expectR = \case L{} -> error "expectR"; R value -> value
+
+expectL :: LR -> Ref Value
+expectL = \case R{} -> error "expectL"; L ref -> ref
+
+
 instance Show LR where
   show = \case
     L{} -> "L"
@@ -376,8 +365,7 @@ instance Show LR where
 state0 :: State
 state0 = State { ip = 0, stack = Map.empty, depth = 0, base = 0, ups = [], callStack = [] }
 
-data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8, prevUps :: [LR] }
-  deriving Show
+data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8, prevUps :: [Ref Value] }
 
 ----------------------------------------------------------------------
 -- copy and paste of primitive values and operations; add VCodePointer
@@ -388,7 +376,7 @@ data Value
   | VString String
   | VFunc FuncDef
 
-data FuncDef = FuncDef  { codePointer :: Int, arity :: Word8, upValues :: [LR] } -- TODO upValues must always be refs
+data FuncDef = FuncDef  { codePointer :: Int, arity :: Word8, upValues :: [Ref Value] }
 
 instance Show Value where
   show = \case
