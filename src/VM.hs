@@ -90,11 +90,14 @@ dispatch pos = \case
     Effect (Runtime.Print (show v))
   OP.JUMP -> do
     i <- FetchArg
-    ModIP (+ (fromIntegral i - 128)) -- TODO: share the 128 hack
+    ModIP (+ fromIntegral i)
   OP.JUMP_IF_FALSE -> do
     i <- FetchArg
     v <- Peek
-    if isTruthy v then pure () else ModIP (+ (fromIntegral i - 128))
+    if isTruthy v then pure () else ModIP (+ fromIntegral i)
+  OP.LOOP -> do
+    i <- FetchArg
+    ModIP (\x -> x - fromIntegral i)
 
   OP.CALL -> do
     nActuals <- FetchArg
@@ -117,7 +120,7 @@ dispatch pos = \case
     arity <- FetchArg
     numUpvalues <- FetchArg
     off <- FetchArg
-    dest <- (+ (fromIntegral off - 128)) <$> GetIP
+    dest <- (+ fromIntegral off) <$> GetIP
     let
       getClosedValue :: VM (Ref Value)
       getClosedValue = do

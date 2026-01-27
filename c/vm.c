@@ -36,9 +36,9 @@ typedef enum {
   OP_NEGATE             = '~',
 
   OP_PRINT              = 'p',
-  OP_JUMP               = 'j',
-  OP_JUMP_IF_FALSE      = 'b',
-  //OP_LOOP
+  OP_JUMP               = 'j', // jump forwards
+  OP_JUMP_IF_FALSE      = 'b', // conditional jump forwards
+  OP_LOOP               = 'L', // jump backwards
 
   OP_CALL               = 'C',
   OP_CLOSURE            = 'F',
@@ -469,17 +469,20 @@ void run_code(Code code) {
       break;
     }
     case OP_JUMP: {
-      u8 arg = *ip++;
-      int dist = (int)arg - 128;
-      ip+=dist;
+      u8 dist = *ip++;
+      ip += dist;
       break;
     }
     case OP_JUMP_IF_FALSE: {
-      u8 arg = *ip++;
-      int dist = (int)arg - 128;
+      u8 dist = *ip++;
       Value value = sp[-1]; //peek
       bool taken = is_falsey(value);
-      if (taken) ip+=dist;
+      if (taken) ip += dist;
+      break;
+    }
+    case OP_LOOP: {
+      u8 dist = *ip++;
+      ip -= dist;
       break;
     }
     case OP_CALL: {
@@ -505,7 +508,7 @@ void run_code(Code code) {
     case OP_CLOSURE: {
       u8 arity = *ip++;
       u8 num_ups = *ip++;
-      int dist = (int)(*ip++) - 128;
+      u8 dist = *ip++;
       u8* code = ip + dist;
       ObjClosure* closure = makeClosure(arity,code,num_ups);
       for (int u = 0; u < num_ups; u++) {

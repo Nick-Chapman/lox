@@ -31,7 +31,7 @@ data Op
   | PRINT
   | JUMP
   | JUMP_IF_FALSE
-  -- | LOOP
+  | LOOP
 
   | CALL
   | CLOSURE
@@ -70,7 +70,7 @@ encode = c2w . \case
   OP.PRINT              -> 'p'
   OP.JUMP               -> 'j'
   OP.JUMP_IF_FALSE      -> 'b'
-  -- OP.LOOP
+  OP.LOOP               -> 'L'
 
   OP.CALL               -> 'C'
   OP.CLOSURE            -> 'F'

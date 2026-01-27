@@ -50,11 +50,11 @@ compStatThen env = \case
 
   SIf cond s1 s2 -> \k -> mdo
     compExp cond
-    jumpIfFalse elseBranch
+    Emit OP.JUMP_IF_FALSE; forwards elseBranch
     -- thenBranch:
     Emit OP.POP
     compStat env s1
-    jump rejoin
+    Emit OP.JUMP; forwards rejoin
     elseBranch <- Here
     Emit OP.POP
     compStat env s2
@@ -64,10 +64,11 @@ compStatThen env = \case
   SWhile cond stat -> \k -> mdo
     start <- Here
     compExp cond
-    jumpIfFalse done
+    Emit OP.JUMP_IF_FALSE; forwards done
     Emit OP.POP
     compStat env stat
-    jump start
+    Emit OP.LOOP
+    backwards start
     done <- Here
     Emit OP.POP
     k env
@@ -93,9 +94,9 @@ compStatThen env = \case
     Emit OP.CLOSURE
     Emit (OP.ARG (fromIntegral $ length formals))
     Emit (OP.ARG (fromIntegral $ length free))
-    relativize def
+    forwards def
     sequence_ [ emitCloseVar x | x <- free ]
-    jump after
+    Emit OP.JUMP; forwards after
     def <- Here
     let subEnv = foldl (flip insertEnv) (frameEnv free) (fname:formals)
     compStats subEnv statements
@@ -179,7 +180,7 @@ compStatThen env = \case
 
       ELogicalAnd e1 e2 -> mdo
         compExp e1
-        jumpIfFalse after
+        Emit OP.JUMP_IF_FALSE; forwards after
         Emit OP.POP
         compExp e2
         after <- Here
@@ -187,8 +188,8 @@ compStatThen env = \case
 
       ELogicalOr e1 e2 -> mdo
         compExp e1
-        jumpIfFalse beforeE2
-        jump end
+        Emit OP.JUMP_IF_FALSE; forwards beforeE2
+        Emit OP.JUMP; forwards end
         beforeE2 <- Here
         Emit OP.POP
         compExp e2
@@ -207,22 +208,22 @@ compStatThen env = \case
       EGetProp{} -> undefined
       ESetProp{} -> undefined
 
+forwards :: Int -> Asm ()
+forwards a = do
+  b <- Here
+  relativize (a - b - 1)
 
-jump :: Int -> Asm ()
-jump i = do Emit OP.JUMP; relativize i
-
-jumpIfFalse :: Int -> Asm ()
-jumpIfFalse i = do Emit OP.JUMP_IF_FALSE; relativize i
+backwards :: Int -> Asm ()
+backwards a = do
+  b <- Here
+  relativize (- (a - b - 1))
 
 relativize :: Int -> Asm ()
-relativize a = do
-  b <- Here
-  let dist = a - b - 1
+relativize dist = do
   Emit $
-    if dist > 127 then error "too far forward" else do
-      if dist < -128 then error "too far backward" else do
-        let u = dist + 128 -- 0..255
-        OP.ARG (fromIntegral u)
+    if dist < 0 then error "relativize: negative" else do
+      if dist > 255 then error "relativize: too big" else do
+        OP.ARG (fromIntegral dist)
 
 ----------------------------------------------------------------------
 -- environment
