@@ -115,10 +115,10 @@ compStatThen env = \case
       let pos = initPos
       lookupEnv pos name env >>= \case
         VLocal n -> do
-          Emit OP.GET_LOCAL
+          Emit (OP.ARG 1)
           Emit (OP.ARG n)
         VFrame n -> do
-          Emit OP.GET_UPVALUE
+          Emit (OP.ARG 2)
           Emit (OP.ARG n)
 
     compExp :: Exp -> Asm ()

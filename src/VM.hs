@@ -136,18 +136,9 @@ dispatch pos = \case
     let
       getClosedValue :: VM (Ref Value)
       getClosedValue = do
-        Fetch >>= \case
-          Nothing -> error "getClosedValue"
-          Just (pos,op) -> do
-            case op of
-              OP.GET_LOCAL -> do -- TODO: use OP.ARG
-                i <- FetchArg
-                GetSlot i
-              OP.GET_UPVALUE -> do
-                i <- FetchArg
-                GetUpValue i
-              _ ->
-                error (show (pos,"getClosedValue",op))
+        mode <- FetchArg
+        i <- FetchArg
+        case mode of 1 -> GetSlot i; 2 -> GetUpValue i; _ -> error "getClosedValue/mode"
 
     upValues <- sequence $ replicate (fromIntegral numUpvalues) getClosedValue
     Push $ VFunc FuncDef{ codePointer = dest, arity, upValues }
