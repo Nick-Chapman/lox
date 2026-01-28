@@ -16,7 +16,8 @@ var max = 30;
 // My versions...
 // T: tlox: 3.2s
 // H: hlox: VERY SLOW (Haskell VM.hs)
-// C: lox:  0.37 -- TODO: why is my vm.c slower than reference?
+// C: lox:  0.37 (correct sharing semantics)
+// C: lox:  0.14 (NO_SHARING - see ../c/vm.c)
 
 var start = clock();
 var i = 0;

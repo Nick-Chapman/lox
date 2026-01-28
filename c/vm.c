@@ -249,6 +249,21 @@ bool is_falsey(Value a) { // just nil/false
 }
 
 //////////////////////////////////////////////////////////////////////
+// Select sharing semantics...
+
+//#define NO_SHARING // Enable for 3x speedup on ../examples/bench1.lox
+
+#ifdef NO_SHARING
+// DONT respect sharing semantics...
+#define indirect(v) (v)
+#define deref(v) (&v)
+#else
+// Respect sharing semantics...
+#define indirect(v) (ValueOfIndirection(makeIndirection(v)))
+#define deref(v) (&AsIndirection(v)->value)
+#endif
+
+//////////////////////////////////////////////////////////////////////
 // Decode static program text: constants and bytecode
 
 typedef struct {
@@ -390,26 +405,26 @@ void run_code(Code code) {
     }
     case OP_GET_LOCAL: {
       u8 arg = ARG;
-      Value value = AsIndirection(base[arg])->value;
+      Value value = *deref(base[arg]);;
       PUSH(value);
       break;
     }
     case OP_SET_LOCAL: {
       u8 arg = ARG;
       Value value = TOP; //peek
-      AsIndirection(base[arg])->value = value;
+      *deref(base[arg]) = value;
       break;
     }
     case OP_GET_UPVALUE: {
       u8 arg = ARG;
-      Value value = AsIndirection(ups[arg])->value;
+      Value value = *deref(ups[arg]);
       PUSH(value);
       break;
     }
     case OP_SET_UPVALUE: {
       u8 arg = ARG;
       Value value = TOP; //peek
-      AsIndirection(ups[arg])->value = value;
+      *deref(ups[arg]) = value;
       break;
     }
     case OP_EQUAL: {
@@ -488,7 +503,7 @@ void run_code(Code code) {
     }
     case OP_CALL: {
       u8 num_actuals = ARG;
-      Value callee = AsIndirection(sp[-1-num_actuals])->value;
+      Value callee = *deref(sp[-1-num_actuals]);
       if (!IsClosure(callee)) {
         runtime_error("Can only call functions and classes.");
       }
@@ -534,7 +549,7 @@ void run_code(Code code) {
     }
     case OP_INDIRECT: {
       Value v1 = TOP;
-      Value value = ValueOfIndirection(makeIndirection(v1));
+      Value value = indirect(v1);
       TOP = value;
       break;
     }
