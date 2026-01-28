@@ -51,7 +51,6 @@ argsDescs :: Op -> [ArgDesc]
 argsDescs = \case
   OP.NUMBER -> [N]
   OP.STRING -> [N]
-  OP.SET_LOCAL -> [N]
   OP.GET_LOCAL -> [N]
   OP.GET_UPVALUE -> [N]
   OP.SET_UPVALUE -> [N]

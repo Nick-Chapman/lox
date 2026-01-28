@@ -203,8 +203,9 @@ compStatThen env = \case
         compExp e
         lookupEnv pos name env >>= \case
           VLocal n -> do
-            Emit OP.SET_LOCAL
+            Emit OP.GET_LOCAL
             Emit (OP.ARG n)
+            Emit OP.ASSIGN
           VFrame n -> do
             Emit OP.SET_UPVALUE
             Emit (OP.ARG n)

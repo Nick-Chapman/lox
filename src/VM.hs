@@ -47,11 +47,6 @@ dispatch pos = \case
     v <- GetSlot i
     Push v
 
-  OP.SET_LOCAL -> do
-    i <- FetchArg
-    v <- Peek
-    r <- expectIndirection <$> GetSlot i
-    Effect (WriteRef r v)
   OP.GET_UPVALUE -> do
     i <- FetchArg
     r <- GetUpValue i
@@ -68,9 +63,13 @@ dispatch pos = \case
     r <- Effect (NewRef v)
     Push (VIndirection r)
   OP.DEREF -> do
-    r <- expectIndirection <$> Pop
+    r <- deref <$> Pop
     v <- Effect (ReadRef r)
     Push v
+  OP.ASSIGN -> do
+    r <- deref <$> Pop
+    v <- Peek
+    Effect (WriteRef r v)
 
   OP.EQUAL -> do
     v2 <- Pop
@@ -112,7 +111,7 @@ dispatch pos = \case
   OP.CALL -> do
     pos <- FetchArg
     nActuals <- FetchArg
-    r <- expectIndirection <$> PeekSlot (1+nActuals)
+    r <- deref <$> PeekSlot (1+nActuals)
     Effect (ReadRef r) >>= \case
       VFunc FuncDef{codePointer,upValues} -> do
         prevIP <- GetIP
@@ -138,7 +137,7 @@ dispatch pos = \case
         mode <- FetchArg
         i <- FetchArg
         case mode of
-          1 -> expectIndirection <$> GetSlot i
+          1 -> deref <$> GetSlot i
           2 -> GetUpValue i
           _ -> error "getClosedValue/mode"
 
@@ -353,8 +352,8 @@ data State = State
 state0 :: State
 state0 = State { ip = 0, items = [], base = 0, ups = [], callStack = [] }
 
-expectIndirection :: Value -> Ref Value
-expectIndirection = \case VIndirection r -> r; _ -> error "expectIndirection"
+deref :: Value -> Ref Value
+deref = \case VIndirection r -> r; _ -> error "deref"
 
 data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Ref Value] }
 

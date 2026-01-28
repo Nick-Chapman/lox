@@ -17,12 +17,12 @@ data Op
 
   | POP
   | GET_LOCAL
-  | SET_LOCAL
   | GET_UPVALUE
   | SET_UPVALUE
 
   | INDIRECT
   | DEREF
+  | ASSIGN
 
   | EQUAL
   | GREATER
@@ -61,13 +61,13 @@ encode = c2w . \case
   OP.FALSE              -> 'f'
 
   OP.POP                -> '_'
-  OP.GET_LOCAL          -> '-'
-  OP.SET_LOCAL          -> ':'
-  OP.GET_UPVALUE        -> ','
+  OP.GET_LOCAL          -> '/'
+  OP.GET_UPVALUE        -> '\\'
   OP.SET_UPVALUE        -> ';'
 
   OP.INDIRECT           -> '&'
   OP.DEREF              -> '*'
+  OP.ASSIGN             -> '='
 
   OP.EQUAL              -> 'e'
   OP.GREATER            -> 'g'
