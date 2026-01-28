@@ -213,7 +213,9 @@ void print_value(Value v) {
     ObjString* str = AsString(v);
     printf("%.*s",str->length,str->payload);
   } else if (IsClosure(v)) {
-    printf("<func>");
+    u8 len = AsClosure(v)->code[-1];
+    char* name = (char*)&AsClosure(v)->code[-1-len];
+    printf("%.*s",len-1,name);
   } else if (IsIndirection(v)) {
     printf("&");
     print_value(AsIndirection(v)->value);

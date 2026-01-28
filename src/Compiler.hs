@@ -16,7 +16,6 @@ import OP qualified
 import Pos (Pos,initPos)
 import Text.Printf (printf)
 
-
 compile :: [Stat] -> Either (Pos,String) Code
 compile decls = do
   runAsm $ do
@@ -24,9 +23,6 @@ compile decls = do
       compStats globals decls
       Emit OP.RETURN
       newline
-
-newline :: Asm () -- make bytecode nicer for human consumption
-newline = Emit (OP.ARG $ fromIntegral $ c2w '\n')
 
 nativeClock :: Env -> (Env -> Asm ()) -> Asm ()
 nativeClock env k = mdo
@@ -37,6 +33,7 @@ nativeClock env k = mdo
   forwards def
   Emit OP.JUMP; forwards after
 
+  embedFunctionName "<native fn>\0" -- clock is the only native function!
   def <- Here
   Emit (OP.ARG arity)
   Emit OP.CLOCK
@@ -116,7 +113,7 @@ compStatThen env = \case
       Just exp -> compExp exp
     Emit OP.RETURN
 
-  SFunDecl func@Func{name=fname,formals,statements} -> \k -> mdo
+  SFunDecl func@Func{name=fname@Identifier{name=funcName},formals,statements} -> \k -> mdo
     let free = Set.toList $ fvFunc func
     Emit OP.CLOSURE
     Emit (OP.ARG (length free))
@@ -124,6 +121,8 @@ compStatThen env = \case
     sequence_ [ emitCloseVar x | x <- free ]
     Emit OP.JUMP; forwards after
 
+    newline
+    embedFunctionName (printf "<fn %s>\0" funcName)
     def <- Here
     let arity = length formals
     Emit (OP.ARG arity)
@@ -255,6 +254,18 @@ relativize dist = do
     if dist < 0 then error "relativize: negative" else do
       if dist > 255 then error "relativize: too big" else do
         OP.ARG dist
+
+embedFunctionName :: String -> Asm ()
+embedFunctionName printName = do
+  embedText printName
+  Emit (OP.ARG (length printName))
+
+embedText :: String -> Asm ()
+embedText str = sequence_ [ Emit (OP.ARG $ fromIntegral $ c2w c) | c <- str ]
+
+newline :: Asm () -- make bytecode nicer for human consumption
+newline = embedText "\n"
+
 
 ----------------------------------------------------------------------
 -- environment

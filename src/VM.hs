@@ -2,6 +2,7 @@ module VM (runCode) where
 
 import Code (Code(..))
 import Control.Monad (ap,liftM)
+import Data.ByteString.Internal (w2c)
 import Data.List (isSuffixOf)
 import OP (Op)
 import OP qualified
@@ -86,7 +87,8 @@ dispatch pos = \case
 
   OP.PRINT -> do
     v <- Pop
-    Effect (Runtime.Print (show v))
+    str <- seeValue v
+    Effect (Runtime.Print str)
   OP.JUMP -> do
     i <- FetchArg
     ModIP (+ i)
@@ -167,6 +169,23 @@ dispatch pos = \case
     Push (mk n)
 
 
+seeValue :: Value -> VM String
+seeValue = \case
+  VNil -> pure "nil"
+  VBool b -> pure (if b then "true" else "false")
+  VNumber n -> pure $ do
+    let s = printf "%f" n
+    if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
+  VString s -> pure s
+  VFunc FuncDef{codePointer} -> do
+    len <- FetchByte (codePointer-1)
+    fetchString (codePointer-1-len) (len-1) -- loose '\0'
+
+fetchString :: Int -> Int -> VM String
+fetchString start len =
+  sequence [ (w2c . fromIntegral) <$> FetchByte (start+i) | i <- [0.. len-1] ]
+
+
 instance Functor VM where fmap = liftM
 instance Applicative VM where pure = Ret; (<*>) = ap
 instance Monad VM where (>>=) = Bind
@@ -190,6 +209,8 @@ data VM a where
   GetConstStr :: Int -> VM Value
   Fetch :: VM (Maybe (Pos,Op))
   FetchArg :: VM Int
+  FetchByte :: Int -> VM Int
+
   ModIP :: (Int -> Int) -> VM ()
   GetIP :: VM Int
   SetIP :: Int -> VM ()
@@ -205,8 +226,6 @@ data VM a where
   SetUps :: [Ref Value] -> VM ()
 
   GetUpValue :: Int -> VM (Ref Value)
-
-  DebugStack :: VM ()
 
 
 runVM :: Code -> VM () -> Eff ()
@@ -269,6 +288,11 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
           (_,OP.ARG i) -> k i s { ip = ip + 1 }
           _ -> error "FetchArg"
 
+      FetchByte p -> \k -> do
+        case chunk !! p of
+          (_,OP.ARG i) -> k i s
+          _ -> error "FetchByte"
+
       ModIP g -> \k -> do
         let State{ip} = s
         k () s { ip = g ip }
@@ -314,10 +338,6 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
         let r = ups !! arg
         k r s
 
-      DebugStack -> \k -> do
-        Runtime.Print(show s)
-        k () s
-
 data State = State
   { ip :: Int
   , items :: [LR]
@@ -329,11 +349,6 @@ data State = State
 state0 :: State
 state0 = State { ip = 0, items = [], base = 0, ups = [], callStack = [] }
 
-instance Show State where
-  show State{callStack=_,base,items} = do
-    --printf (show callStack) ++
-    printf "base=%d, stack: %s" base (show (reverse items))
-
 data LR = L (Ref Value) | R Value
 
 expectR :: LR -> Value
@@ -341,12 +356,6 @@ expectR = \case L{} -> error "expectR"; R value -> value
 
 expectL :: LR -> Ref Value
 expectL = \case R{} -> error "expectL"; L ref -> ref
-
-
-instance Show LR where
-  show = \case
-    L{} -> "L"
-    R v -> show v
 
 data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Ref Value] }
 
@@ -360,16 +369,6 @@ data Value
   | VFunc FuncDef
 
 data FuncDef = FuncDef  { codePointer :: Int, upValues :: [Ref Value] }
-
-instance Show Value where
-  show = \case
-    VNil -> "nil"
-    VBool b -> if b then "true" else "false"
-    VNumber n -> do
-      let s = printf "%f" n
-      if ".0" `isSuffixOf` s then reverse $ drop 2 $ reverse s else s
-    VString s -> s
-    VFunc{} -> "func"
 
 isTruthy :: Value -> Bool
 isTruthy = \case

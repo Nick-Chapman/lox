@@ -1,7 +1,6 @@
 module OP(Op(..),encode,printableOffset) where
 
 import Data.ByteString.Internal (w2c,c2w)
-
 import Data.Word (Word8)
 
 printableOffset :: Int
@@ -89,5 +88,5 @@ encode = c2w . \case
   OP.CLOCK              -> '@'
 
   OP.ARG byte -> do
-    if byte < 0 || byte > 93 then error (show ("encode/OP.ARG",byte)) else
+    if byte < 0 || byte > 255 then error (show ("encode/OP.ARG",byte)) else
       w2c (fromIntegral (printableOffset + byte))
