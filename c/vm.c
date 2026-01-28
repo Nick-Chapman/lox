@@ -416,18 +416,23 @@ void run_code(Code code) {
       TOP = value;
       break;
     }
-#define COMPARE(op) { \
+
+#define BINARY(mk,op) {                         \
       Value v2 = POP; \
-      Value v1 = TOP; \
+      Value v1 = POP; \
       if (!(IsDouble(v1) && IsDouble(v2))) { \
         runtime_error("Operands must be numbers."); \
       } \
-      Value value = ValueOfBool (AsDouble(v1) op AsDouble(v2)); \
-      TOP = value; \
+      Value value = (mk) (AsDouble(v1) op AsDouble(v2));    \
+      PUSH(value); \
     }
-    case OP_GREATER: { COMPARE (>) break; }
-    case OP_LESS: { COMPARE (<) break; }
-#undef COMPARE
+    case OP_GREATER: { BINARY(ValueOfBool, >) break; }
+    case OP_LESS: { BINARY(ValueOfBool, <) break; }
+    case OP_SUBTRACT: { BINARY(ValueOfDouble, -); break; }
+    case OP_MULTIPLY: { BINARY(ValueOfDouble, *); break; }
+    case OP_DIVIDE: { BINARY(ValueOfDouble, /); break; }
+#undef BINARY
+
     case OP_ADD: {
       Value v2 = POP;
       Value v1 = TOP;
@@ -442,19 +447,7 @@ void run_code(Code code) {
       }
       break;
     }
-#define BIN(op) { \
-      Value v2 = POP; \
-      Value v1 = POP; \
-      if (!(IsDouble(v1) && IsDouble(v2))) { \
-        runtime_error("Operands must be numbers."); \
-      } \
-      Value value = ValueOfDouble (AsDouble(v1) op AsDouble(v2)); \
-      PUSH(value); \
-    }
-    case OP_SUBTRACT: { BIN(-); break; }
-    case OP_MULTIPLY: { BIN(*); break; }
-    case OP_DIVIDE: { BIN(/); break; }
-#undef BIN
+
     case OP_NOT: {
       Value v1 = TOP;
       TOP = ValueOfBool(is_falsey(v1));
