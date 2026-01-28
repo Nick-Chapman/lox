@@ -318,8 +318,8 @@ void print_stack(Value* base, Value* top) {
 //////////////////////////////////////////////////////////////////////
 // runtime_error()
 
-void runtime_error(char* mes) {
-  printf("%s\n[line 1] in script\n", mes); // TODO: print real backtrace
+void runtime_error(u8 pos, char* mes) {
+  printf("%s\n[line %d] in script\n", mes, pos); // TODO: full backtrace
   exit(1); // TODO: what exit code?
 }
 
@@ -441,7 +441,7 @@ void run_code(Code code) {
       Value v2 = POP; \
       Value v1 = POP; \
       if (!(IsDouble(v1) && IsDouble(v2))) { \
-        runtime_error("Operands must be numbers."); \
+        runtime_error(1,"Operands must be numbers.");   \
       } \
       Value value = (mk) (AsDouble(v1) op AsDouble(v2));    \
       PUSH(value); \
@@ -463,7 +463,7 @@ void run_code(Code code) {
         Value value = ValueOfString (concatString(AsString(v1),AsString(v2)));
         TOP = value;
       } else {
-        runtime_error("Operands must be two numbers or two strings.");
+        runtime_error(1,"Operands must be two numbers or two strings.");
       }
       break;
     }
@@ -476,7 +476,7 @@ void run_code(Code code) {
     case OP_NEGATE: {
       Value v1 = TOP;
       if (!IsDouble(v1)) {
-        runtime_error("Operand must be a number.");
+        runtime_error(1,"Operand must be a number.");
       }
       TOP = ValueOfDouble(- AsDouble(v1));
       break;
@@ -504,10 +504,11 @@ void run_code(Code code) {
       break;
     }
     case OP_CALL: {
+      u8 pos = ARG;
       u8 num_actuals = ARG;
       Value callee = *deref(sp[-1-num_actuals]);
       if (!IsClosure(callee)) {
-        runtime_error("Can only call functions and classes.");
+        runtime_error(1,"Can only call functions and classes.");
       }
       ObjClosure* closure = AsClosure(callee);
       CallFrame cf = { .ip = ip, .base = base, .ups = ups };
@@ -519,7 +520,7 @@ void run_code(Code code) {
       if (num_actuals != arity) {
         char buf[80];
         sprintf(buf,"Expected %d arguments but got %d.",arity,num_actuals);
-        runtime_error(buf);
+        runtime_error(pos,buf);
       }
       break;
     }

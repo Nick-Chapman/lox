@@ -101,6 +101,7 @@ dispatch pos = \case
     ModIP (\x -> x - i)
 
   OP.CALL -> do
+    pos <- FetchArg
     nActuals <- FetchArg
     r <- PeekSlot (1+nActuals)
     Effect (ReadRef r) >>= \case

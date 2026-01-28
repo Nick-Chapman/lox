@@ -231,6 +231,7 @@ compStatThen env = \case
         Emit OP.INDIRECT
         sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
         Position pos $ Emit OP.CALL
+        Emit (OP.ARG pos)
         Emit (OP.ARG (length args))
 
       EThis{} -> undefined
