@@ -49,13 +49,13 @@ dispatch pos = \case
 
   OP.GET_UPVALUE -> do
     i <- FetchArg
-    r <- GetUpValue i
+    r <- deref <$> GetUpValue i
     v <- Effect (ReadRef r)
     Push v
   OP.SET_UPVALUE -> do
     i <- FetchArg
     v <- Peek
-    r <- GetUpValue i
+    r <- deref <$> GetUpValue i
     Effect (WriteRef r v)
 
   OP.INDIRECT -> do
@@ -130,19 +130,19 @@ dispatch pos = \case
   OP.CLOSURE -> do
     numUpvalues <- FetchArg
     off <- FetchArg
-    dest <- (+ off) <$> GetIP
+    codePointer <- (+ off) <$> GetIP
     let
-      getClosedValue :: VM (Ref Value)
-      getClosedValue = do
+      collectUpValue :: VM Value
+      collectUpValue = do
         mode <- FetchArg
         i <- FetchArg
         case mode of
-          1 -> deref <$> GetSlot i
+          1 -> GetSlot i
           2 -> GetUpValue i
-          _ -> error "getClosedValue/mode"
+          _ -> error "collectUpValue/mode"
 
-    upValues <- sequence $ replicate numUpvalues getClosedValue
-    Push $ VFunc FuncDef{ codePointer = dest, upValues }
+    upValues <- sequence $ replicate numUpvalues collectUpValue
+    Push $ VFunc FuncDef{ codePointer, upValues }
 
   OP.RETURN -> do
     res <- Pop
@@ -227,10 +227,10 @@ data VM a where
   PushCallFrame :: CallFrame -> VM ()
   PopCallFrame :: VM CallFrame
 
-  GetUps :: VM [Ref Value]
-  SetUps :: [Ref Value] -> VM ()
+  GetUps :: VM [Value]
+  SetUps :: [Value] -> VM ()
 
-  GetUpValue :: Int -> VM (Ref Value)
+  GetUpValue :: Int -> VM Value
 
 
 runVM :: Code -> VM () -> Eff ()
@@ -345,7 +345,7 @@ data State = State
   { ip :: Int
   , items :: [Value]
   , base :: Int
-  , ups :: [Ref Value]
+  , ups :: [Value]
   , callStack :: [CallFrame]
   }
 
@@ -355,7 +355,7 @@ state0 = State { ip = 0, items = [], base = 0, ups = [], callStack = [] }
 deref :: Value -> Ref Value
 deref = \case VIndirection r -> r; _ -> error "deref"
 
-data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Ref Value] }
+data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Value] }
 
 ----------------------------------------------------------------------
 -- copy and paste of primitive values and operations; add VCodePointer
@@ -367,7 +367,7 @@ data Value
   | VFunc FuncDef
   | VIndirection (Ref Value)
 
-data FuncDef = FuncDef  { codePointer :: Int, upValues :: [Ref Value] }
+data FuncDef = FuncDef  { codePointer :: Int, upValues :: [Value] }
 
 isTruthy :: Value -> Bool
 isTruthy = \case
