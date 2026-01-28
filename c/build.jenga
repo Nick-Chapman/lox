@@ -1,4 +1,4 @@
 
 vm.exe : vm.c
-  gcc 2>&1 -fdiagnostics-color=always -Werror -Wall $in -o $out
+  gcc 2>&1 -fdiagnostics-color=always -O2 -Werror -Wall $in -o $out
 

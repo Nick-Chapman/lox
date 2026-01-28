@@ -16,7 +16,7 @@ var max = 30;
 // My versions...
 // T: tlox: 3.2s
 // H: hlox: VERY SLOW (Haskell VM.hs)
-// C: lox:  0.76 -- TODO: check I am compiling with optimization flags!
+// C: lox:  0.37 -- TODO: why is my vm.c slower than reference?
 
 var start = clock();
 var i = 0;
