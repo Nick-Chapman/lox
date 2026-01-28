@@ -40,7 +40,7 @@ dispatch pos = \case
   OP.FALSE -> Push (VBool False)
 
   OP.POP -> do
-    _ <- PopStack
+    _ <- Pop
     pure ()
   OP.GET_LOCAL -> do
     i <- FetchArg
@@ -136,7 +136,7 @@ dispatch pos = \case
   OP.INDIRECT -> do
     v <- Pop
     r <- Effect (NewRef v)
-    PushStack (L r)
+    Push (VIndirection r)
 
   OP.RETURN -> do
     res <- Pop
@@ -181,6 +181,7 @@ seeValue = \case
   VFunc FuncDef{codePointer} -> do
     len <- FetchByte (codePointer-1)
     fetchString (codePointer-1-len) (len-1) -- loose '\0'
+  VIndirection{} -> pure "<indirection>"
 
 fetchString :: Int -> Int -> VM String
 fetchString start len =
@@ -199,9 +200,6 @@ data VM a where
   Peek :: VM Value
   Push :: Value -> VM ()
   Pop :: VM Value
-
-  PushStack :: LR -> VM ()
-  PopStack :: VM LR
 
   PeekSlot :: Int -> VM (Ref Value)
   GetSlot :: Int -> VM (Ref Value)
@@ -242,27 +240,25 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
       -- Push/Pop/Peek are w.r.t the (sp) depth
       Peek -> loop s (do v <- Pop; Push v; return v)
-      Push v -> loop s (PushStack (R v))
-      Pop -> loop s (expectR <$> PopStack)
 
-      PushStack lr -> \k -> do
+      Push v -> \k -> do
         let State{items} = s
-        k () s { items = lr : items }
+        k () s { items = v : items }
 
-      PopStack -> \k -> do
+      Pop -> \k -> do
         let State{items} = s
         let lr = items !! 0
         k lr s { items = drop 1 items }
 
       PeekSlot n -> \k -> do
         let State{items} = s
-        let ref = expectL (items !! (n-1))
+        let ref = expectIndirection (items !! (n-1))
         k ref s
 
       -- Get/Set are wrt to the base
       GetSlot arg -> \k -> do
         let State{base,items} = s
-        let ref = expectL (reverse items !! (base + arg))
+        let ref = expectIndirection (reverse items !! (base + arg))
         k ref s
 
       GetConstNum arg -> \k -> do
@@ -341,7 +337,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
 data State = State
   { ip :: Int
-  , items :: [LR]
+  , items :: [Value]
   , base :: Int
   , ups :: [Ref Value]
   , callStack :: [CallFrame]
@@ -350,13 +346,8 @@ data State = State
 state0 :: State
 state0 = State { ip = 0, items = [], base = 0, ups = [], callStack = [] }
 
-data LR = L (Ref Value) | R Value
-
-expectR :: LR -> Value
-expectR = \case L{} -> error "expectR"; R value -> value
-
-expectL :: LR -> Ref Value
-expectL = \case R{} -> error "expectL"; L ref -> ref
+expectIndirection :: Value -> Ref Value
+expectIndirection = \case VIndirection r -> r; _ -> error "expectIndirection"
 
 data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Ref Value] }
 
@@ -368,6 +359,7 @@ data Value
   | VNumber Double
   | VString String
   | VFunc FuncDef
+  | VIndirection (Ref Value)
 
 data FuncDef = FuncDef  { codePointer :: Int, upValues :: [Ref Value] }
 
