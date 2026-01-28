@@ -1,4 +1,4 @@
-module Code(Code(..),export,printableOffset) where
+module Code(Code(..),export) where
 
 import Data.Bits (shiftR,(.&.))
 import Data.ByteString.Internal (w2c,c2w)
@@ -7,9 +7,6 @@ import GHC.Float (castDoubleToWord64)
 import OP (Op)
 import OP qualified (encode)
 import Pos (Pos)
-
-printableOffset :: Int
-printableOffset = 32
 
 export :: Code -> String
 export = map w2c . encode

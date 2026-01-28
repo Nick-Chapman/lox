@@ -1,6 +1,6 @@
 module Disassemble (dis) where
 
-import Code (Code(..),printableOffset)
+import Code (Code(..))
 import OP (Op)
 import OP qualified
 import Pos (Pos)
@@ -14,7 +14,7 @@ dis Code{chunk=ops} = loop 0 ops
     loop ip = \case
       [] -> ""
       (_,OP.ARG i):pops -> do
-        printf "%d: %d\n%s" ip (fromIntegral i - printableOffset) (loop (ip+1) pops)
+        printf "%d: %d\n%s" ip i (loop (ip+1) pops)
 
       (_,op):pops -> do
         let (args,pops') = getArgs op pops
@@ -30,8 +30,8 @@ dis Code{chunk=ops} = loop 0 ops
 
 decode :: Int -> (Int,ArgDesc) -> String
 decode ip (n,desc) = case desc of
-  N -> printf "%d" (n - printableOffset)
-  D -> printf "LAB-%d" (ip + fromIntegral n - printableOffset)
+  N -> printf "%d" n
+  D -> printf "LAB-%d" (ip + n)
 
 getArgs :: Op -> [(Pos,Op)] -> ([(Int,ArgDesc)], [(Pos,Op)])
 getArgs op pops = loop [] pops descs0

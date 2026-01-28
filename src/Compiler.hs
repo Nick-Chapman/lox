@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..),Func(..))
-import Code (Code(..),printableOffset)
+import Code (Code(..))
 import Control.Monad (ap,liftM)
 import Control.Monad.Fix (MonadFix,mfix)
 import Data.List (sortBy)
@@ -248,8 +248,9 @@ relativize dist = do
 
 smallArg :: Int -> Op
 smallArg i =
+  -- Add 33 to get into printable ascii range: 33..126
   if i > 93 then error "smallArg: too big" else
-    OP.ARG (fromIntegral $ printableOffset + i) -- Add 33 to get into printable ascii range: 33..126
+    OP.ARG (fromIntegral i)
 
 ----------------------------------------------------------------------
 -- environment

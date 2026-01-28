@@ -1,6 +1,6 @@
 module VM (runCode) where
 
-import Code (Code(..),printableOffset)
+import Code (Code(..))
 import Control.Monad (ap,liftM)
 import Data.List (isSuffixOf)
 import OP (Op)
@@ -266,7 +266,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       FetchArg -> \k -> do
         let State{ip} = s
         case chunk !! ip of
-          (_,OP.ARG i) -> k (fromIntegral i - printableOffset) s { ip = ip + 1 }
+          (_,OP.ARG i) -> k (fromIntegral i) s { ip = ip + 1 }
           _ -> error "FetchArg"
 
       ModIP g -> \k -> do

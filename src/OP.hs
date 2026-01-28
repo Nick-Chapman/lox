@@ -1,8 +1,11 @@
-module OP(Op(..),encode) where
+module OP(Op(..),encode,printableOffset) where
 
 import Data.ByteString.Internal (w2c,c2w)
 
 import Data.Word (Word8)
+
+printableOffset :: Int
+printableOffset = 32
 
 data Op
 
@@ -83,4 +86,4 @@ encode = c2w . \case
 
   OP.CLOCK              -> '@'
 
-  OP.ARG byte           -> w2c byte
+  OP.ARG byte           -> w2c (fromIntegral printableOffset + byte)
