@@ -1,19 +1,5 @@
 
-# (1) Bytecode commpiler (haskell) + VM (Haskell)
-#exe-under-test : ../src/lox.exe : ln $in $out
-#deps-for-exe-under-test : : touch $@
-
-# (2) Bytecode commpiler (haskell) + export to VM (C)
-exe-under-test: my-lox.sh : ln $in $out
-deps-for-exe-under-test:
-  echo ../src/lox.exe >> $out
-  echo ../c/vm.exe >> $out
-
-my-lox.sh:
-  #echo './lox.exe -tree $$@' >> $out
-  #echo './lox.exe -bci $$@' >> $out
-  echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out
-  chmod +x $out
+# Tests are organized by chapter increments, or logical groups
 
 chapters:
   echo chap8.list  >> $out  #        69
@@ -31,8 +17,6 @@ groups:
                                           #-----
                                           # 239
 
-# Tests are organized by chapter increments, or logical groups
-
 fullpath.list: @chapters
   cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|/home/nic/other/craftinginterpreters/|' > $out
   #echo ./lambda.lox >> $out
@@ -43,7 +27,19 @@ lambda.lox : ../examples/lambda.lox :
 fib-iter.lox : ../examples/fib-iter.lox :
 thrice.lox : ../examples/thrice.lox :
 
-rules : fullpath.list rules.sh #args-for-exe-under-test
+# T: Tree walk interpreter.
+# H: Bytecode compiler + haskell VM.
+# C: Bytecode compiler + C VM.
+
+T.sh :: echo './lox.exe -tree $$@' >> $out; chmod +x $out
+H.sh :: echo './lox.exe -bci $$@' >> $out; chmod +x $out
+C.sh :: echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out; chmod +x $out
+
+deps-for-T :: echo ../src/lox.exe >> $out
+deps-for-H :: echo ../src/lox.exe >> $out
+deps-for-C :: echo ../src/lox.exe ../c/vm.exe >> $out
+
+rules : fullpath.list rules.sh
   ./rules.sh < $in > $out
 
 include rules
