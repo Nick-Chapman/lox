@@ -333,6 +333,7 @@ void run_code(Code code) {
 
 #define PUSH(d) (*sp++ = (d))
 #define POP (*--sp)
+#define TOP (sp[-1])
 
 #define printableOffset 32 // must match Code.hs
 
@@ -394,7 +395,7 @@ void run_code(Code code) {
     }
     case OP_SET_LOCAL: {
       u8 arg = ARG;
-      Value value = sp[-1]; //peek
+      Value value = TOP; //peek
       AsIndirection(base[arg])->value = value;
       break;
     }
@@ -406,38 +407,38 @@ void run_code(Code code) {
     }
     case OP_SET_UPVALUE: {
       u8 arg = ARG;
-      Value value = sp[-1]; //peek
+      Value value = TOP; //peek
       AsIndirection(ups[arg])->value = value;
       break;
     }
     case OP_EQUAL: {
-      Value v2 = POP; // TODO: avoid pop/pop/push
-      Value v1 = POP;
+      Value v2 = POP;
+      Value v1 = TOP;
       Value value = ValueOfBool (equal_value(v1,v2));
-      PUSH(value);
+      TOP = value;
       break;
     }
 #define COMPARE(op) { \
       Value v2 = POP; \
-      Value v1 = POP; \
+      Value v1 = TOP; \
       if (!(IsDouble(v1) && IsDouble(v2))) { \
         runtime_error("Operands must be numbers."); \
       } \
       Value value = ValueOfBool (AsDouble(v1) op AsDouble(v2)); \
-      PUSH(value); \
+      TOP = value; \
     }
     case OP_GREATER: { COMPARE (>) break; }
     case OP_LESS: { COMPARE (<) break; }
 #undef COMPARE
     case OP_ADD: {
       Value v2 = POP;
-      Value v1 = POP;
+      Value v1 = TOP;
       if (IsDouble(v1) && IsDouble(v2)) {
         Value value = ValueOfDouble (AsDouble(v1) + AsDouble(v2));
-        PUSH(value);
+        TOP = value;
       } else if (IsString(v1) && IsString(v2)) {
         Value value = ValueOfString (concatString(AsString(v1),AsString(v2)));
-        PUSH(value);
+        TOP = value;
       } else {
         runtime_error("Operands must be two numbers or two strings.");
       }
@@ -457,16 +458,16 @@ void run_code(Code code) {
     case OP_DIVIDE: { BIN(/); break; }
 #undef BIN
     case OP_NOT: {
-      Value v1 = sp[-1];
-      sp[-1] = ValueOfBool(is_falsey(v1));
+      Value v1 = TOP;
+      TOP = ValueOfBool(is_falsey(v1));
       break;
     }
     case OP_NEGATE: {
-      Value v1 = sp[-1];
+      Value v1 = TOP;
       if (!IsDouble(v1)) {
         runtime_error("Operand must be a number.");
       }
-      sp[-1] = ValueOfDouble(- AsDouble(v1));
+      TOP = ValueOfDouble(- AsDouble(v1));
       break;
     }
     case OP_PRINT: {
@@ -481,7 +482,7 @@ void run_code(Code code) {
     }
     case OP_JUMP_IF_FALSE: {
       u8 dist = ARG;
-      Value value = sp[-1]; //peek
+      Value value = TOP; //peek
       bool taken = is_falsey(value);
       if (taken) ip += dist;
       break;
@@ -539,9 +540,9 @@ void run_code(Code code) {
       break;
     }
     case OP_INDIRECT: {
-      Value v1 = sp[-1];
+      Value v1 = TOP;
       Value value = ValueOfIndirection(makeIndirection(v1));
-      sp[-1] = value;
+      TOP = value;
       break;
     }
     case OP_RETURN: {
