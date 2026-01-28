@@ -46,17 +46,10 @@ dispatch pos = \case
     i <- FetchArg
     v <- GetSlot i
     Push v
-
   OP.GET_UPVALUE -> do
     i <- FetchArg
-    r <- deref <$> GetUpValue i
-    v <- Effect (ReadRef r)
+    v <- GetUpValue i
     Push v
-  OP.SET_UPVALUE -> do
-    i <- FetchArg
-    v <- Peek
-    r <- deref <$> GetUpValue i
-    Effect (WriteRef r v)
 
   OP.INDIRECT -> do
     v <- Pop

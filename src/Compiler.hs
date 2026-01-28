@@ -198,6 +198,7 @@ compStatThen env = \case
           VFrame n -> do
             Emit OP.GET_UPVALUE
             Emit (OP.ARG n)
+            Emit OP.DEREF
 
       EAssign Identifier{pos,name} e -> do
         compExp e
@@ -207,8 +208,9 @@ compStatThen env = \case
             Emit (OP.ARG n)
             Emit OP.ASSIGN
           VFrame n -> do
-            Emit OP.SET_UPVALUE
+            Emit OP.GET_UPVALUE
             Emit (OP.ARG n)
+            Emit OP.ASSIGN
 
       ELogicalAnd e1 e2 -> mdo
         compExp e1

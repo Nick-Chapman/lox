@@ -53,7 +53,6 @@ argsDescs = \case
   OP.STRING -> [N]
   OP.GET_LOCAL -> [N]
   OP.GET_UPVALUE -> [N]
-  OP.SET_UPVALUE -> [N]
   OP.JUMP -> [D]
   OP.JUMP_IF_FALSE -> [D]
   OP.CALL -> [N]

@@ -24,7 +24,6 @@ typedef enum {
   OP_POP                = '_',
   OP_GET_LOCAL          = '/',
   OP_GET_UPVALUE        = '\\',
-  OP_SET_UPVALUE        = ';',
 
   OP_INDIRECT           = '&',
   OP_DEREF              = '*',
@@ -415,14 +414,8 @@ void run_code(Code code) {
     }
     case OP_GET_UPVALUE: {
       u8 arg = ARG;
-      Value value = *deref(ups[arg]);
+      Value value = ups[arg];
       PUSH(value);
-      break;
-    }
-    case OP_SET_UPVALUE: {
-      u8 arg = ARG;
-      Value value = TOP; //peek
-      *deref(ups[arg]) = value;
       break;
     }
 

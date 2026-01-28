@@ -18,7 +18,6 @@ data Op
   | POP
   | GET_LOCAL
   | GET_UPVALUE
-  | SET_UPVALUE
 
   | INDIRECT
   | DEREF
@@ -63,7 +62,6 @@ encode = c2w . \case
   OP.POP                -> '_'
   OP.GET_LOCAL          -> '/'
   OP.GET_UPVALUE        -> '\\'
-  OP.SET_UPVALUE        -> ';'
 
   OP.INDIRECT           -> '&'
   OP.DEREF              -> '*'
