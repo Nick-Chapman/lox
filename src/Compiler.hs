@@ -4,16 +4,17 @@ import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..),Func(..))
 import Code (Code(..))
 import Control.Monad (ap,liftM)
 import Control.Monad.Fix (MonadFix,mfix)
+import Data.ByteString.Internal (c2w)
 import Data.List (sortBy)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Ord (comparing)
+import Data.Set (Set,(\\),union,singleton)
+import Data.Set qualified as Set
 import OP (Op)
 import OP qualified
 import Pos (Pos,initPos)
 import Text.Printf (printf)
-import Data.Set qualified as Set
-import Data.Set (Set,(\\),union,singleton)
 
 
 compile :: [Stat] -> Either (Pos,String) Code
@@ -21,6 +22,11 @@ compile decls = do
   runAsm $ do
     nativeClock emptyEnv $ \globals -> do
       compStats globals decls
+      Emit OP.RETURN
+      newline
+
+newline :: Asm () -- make bytecode nicer for human consumption
+newline = Emit (OP.ARG $ fromIntegral $ c2w '\n')
 
 nativeClock :: Env -> (Env -> Asm ()) -> Asm ()
 nativeClock env k = mdo
@@ -35,6 +41,7 @@ nativeClock env k = mdo
   Emit (OP.ARG arity)
   Emit OP.CLOCK
   Emit OP.RETURN
+  newline
 
   after <- Here
   Emit OP.INDIRECT
@@ -116,6 +123,7 @@ compStatThen env = \case
     forwards def
     sequence_ [ emitCloseVar x | x <- free ]
     Emit OP.JUMP; forwards after
+
     def <- Here
     let arity = length formals
     Emit (OP.ARG arity)
@@ -123,6 +131,8 @@ compStatThen env = \case
     compStats subEnv statements
     Emit OP.NIL
     Emit OP.RETURN
+    newline
+
     after <- Here
     Emit OP.INDIRECT
     k (insertEnv' fname env)

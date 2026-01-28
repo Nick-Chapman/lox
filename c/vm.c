@@ -360,7 +360,7 @@ void run_code(Code code) {
 
   for (;;step++) {
 
-    if (ip == code.ip_end) return; // halt
+    //if (ip == code.ip_end) return; // Halt (replaced by OP_RETURN)
 
     //print_stack(stack,sp);
     //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,*ip,*ip); fflush(stdout);
@@ -555,6 +555,7 @@ void run_code(Code code) {
     }
     case OP_RETURN: {
       Value value = POP;
+      if (frame_depth == 0) return; //Halt
       CallFrame cf = frames[--frame_depth];
       sp = base;
       ip = cf.ip;
@@ -614,4 +615,5 @@ int main(int argc, char* argv[]) {
 
   Code code = decode(contents,lox_file_size);
   run_code(code);
+  //printf("done!\n");
 }

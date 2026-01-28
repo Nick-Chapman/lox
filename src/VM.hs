@@ -299,7 +299,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       PopCallFrame{} -> \k -> do
         let State{callStack} = s
         case callStack of
-          [] -> error "PopCallFrame"
+          [] -> pure () -- error "PopCallFrame" -- Halt
           cf:callStack -> do
             k cf s { callStack }
 
