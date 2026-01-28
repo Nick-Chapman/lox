@@ -45,36 +45,38 @@ data Op
 encode :: Op -> Word8
 encode = c2w . \case
 
-  OP.NUMBER             -> 'c'
-  OP.STRING             -> '"'
-  OP.NIL                -> 'n'
+  OP.NUMBER             -> '#'
+  OP.STRING             -> '$'
+
+  OP.NIL                -> 'z'
   OP.TRUE               -> 't'
   OP.FALSE              -> 'f'
 
-  OP.POP                -> 'd'
-  OP.GET_LOCAL          -> 'g'
-  OP.SET_LOCAL          -> 's'
-  OP.GET_UPVALUE        -> 'G'
-  OP.SET_UPVALUE        -> 'S'
+  OP.POP                -> '_'
+  OP.GET_LOCAL          -> '.'
+  OP.SET_LOCAL          -> ':'
+  OP.GET_UPVALUE        -> ','
+  OP.SET_UPVALUE        -> ';'
 
-  OP.EQUAL              -> '='
-  OP.GREATER            -> '>'
-  OP.LESS               -> '<'
-  OP.ADD                -> '+'
-  OP.SUBTRACT           -> '-'
-  OP.MULTIPLY           -> '*'
-  OP.DIVIDE             -> '/'
-  OP.NOT                -> '!'
-  OP.NEGATE             -> '~'
+  OP.EQUAL              -> 'e'
+  OP.GREATER            -> 'g'
+  OP.LESS               -> 'l'
+  OP.ADD                -> 'a'
+  OP.SUBTRACT           -> 's'
+  OP.MULTIPLY           -> 'm'
+  OP.DIVIDE             -> 'd'
+  OP.NOT                -> 'n'
+  OP.NEGATE             -> 'i'
 
   OP.PRINT              -> 'p'
-  OP.JUMP               -> 'j'
-  OP.JUMP_IF_FALSE      -> 'b'
+
+  OP.JUMP               -> 'J'
+  OP.JUMP_IF_FALSE      -> 'B'
   OP.LOOP               -> 'L'
 
   OP.CALL               -> 'C'
   OP.CLOSURE            -> 'F'
-  OP.INDIRECT           -> 'I'
+  OP.INDIRECT           -> '&'
   OP.RETURN             -> 'R'
 
   OP.ARG byte           -> w2c byte

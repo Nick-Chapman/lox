@@ -13,36 +13,38 @@ typedef unsigned short u16;
 
 typedef enum {
 
-  OP_NUMBER             = 'c',
-  OP_STRING             = '"',
-  OP_NIL                = 'n',
+  OP_NUMBER             = '#',
+  OP_STRING             = '$',
+
+  OP_NIL                = 'z',
   OP_TRUE               = 't',
   OP_FALSE              = 'f',
 
-  OP_POP                = 'd',
-  OP_GET_LOCAL          = 'g',
-  OP_SET_LOCAL          = 's',
-  OP_GET_UPVALUE        = 'G',
-  OP_SET_UPVALUE        = 'S',
+  OP_POP                = '_',
+  OP_GET_LOCAL          = '.',
+  OP_SET_LOCAL          = ':',
+  OP_GET_UPVALUE        = ',',
+  OP_SET_UPVALUE        = ';',
 
-  OP_EQUAL              = '=',
-  OP_GREATER            = '>',
-  OP_LESS               = '<',
-  OP_ADD                = '+',
-  OP_SUBTRACT           = '-',
-  OP_MULTIPLY           = '*',
-  OP_DIVIDE             = '/',
-  OP_NOT                = '!',
-  OP_NEGATE             = '~',
+  OP_EQUAL              = 'e',
+  OP_GREATER            = 'g',
+  OP_LESS               = 'l',
+  OP_ADD                = 'a',
+  OP_SUBTRACT           = 's',
+  OP_MULTIPLY           = 'm',
+  OP_DIVIDE             = 'd',
+  OP_NOT                = 'n',
+  OP_NEGATE             = 'i',
 
   OP_PRINT              = 'p',
-  OP_JUMP               = 'j', // jump forwards
-  OP_JUMP_IF_FALSE      = 'b', // conditional jump forwards
+
+  OP_JUMP               = 'J', // jump forwards
+  OP_JUMP_IF_FALSE      = 'B', // conditional jump forwards
   OP_LOOP               = 'L', // jump backwards
 
   OP_CALL               = 'C',
   OP_CLOSURE            = 'F',
-  OP_INDIRECT           = 'I',
+  OP_INDIRECT           = '&',
   OP_RETURN             = 'R',
 
 } OpCode;
