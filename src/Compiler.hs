@@ -194,6 +194,7 @@ compStatThen env = \case
           VLocal n -> do
             Emit OP.GET_LOCAL
             Emit (OP.ARG n)
+            Emit OP.DEREF
           VFrame n -> do
             Emit OP.GET_UPVALUE
             Emit (OP.ARG n)

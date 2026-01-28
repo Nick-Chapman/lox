@@ -22,10 +22,13 @@ typedef enum {
   OP_FALSE              = 'f',
 
   OP_POP                = '_',
-  OP_GET_LOCAL          = '.',
+  OP_GET_LOCAL          = '-',
   OP_SET_LOCAL          = ':',
   OP_GET_UPVALUE        = ',',
   OP_SET_UPVALUE        = ';',
+
+  OP_INDIRECT           = '&',
+  OP_DEREF              = '*',
 
   OP_EQUAL              = 'e',
   OP_GREATER            = 'g',
@@ -40,12 +43,11 @@ typedef enum {
   OP_PRINT              = 'p',
 
   OP_JUMP               = 'J', // jump forwards
-  OP_JUMP_IF_FALSE      = 'B', // conditional jump forwards
+  OP_JUMP_IF_FALSE      = 'B', // branch forwards
   OP_LOOP               = 'L', // jump backwards
 
   OP_CALL               = 'C',
   OP_CLOSURE            = 'F',
-  OP_INDIRECT           = '&',
   OP_RETURN             = 'R',
 
   OP_CLOCK              = '@',
@@ -407,7 +409,7 @@ void run_code(Code code) {
     }
     case OP_GET_LOCAL: {
       u8 arg = ARG;
-      Value value = *deref(base[arg]);;
+      Value value = base[arg];
       PUSH(value);
       break;
     }
@@ -429,6 +431,19 @@ void run_code(Code code) {
       *deref(ups[arg]) = value;
       break;
     }
+
+    case OP_INDIRECT: {
+      Value v1 = TOP;
+      Value value = indirect(v1);
+      TOP = value;
+      break;
+    }
+    case OP_DEREF: {
+      Value value = *deref(TOP);
+      TOP = value;
+      break;
+    }
+
     case OP_EQUAL: {
       Value v2 = POP;
       Value v1 = TOP;
@@ -548,12 +563,6 @@ void run_code(Code code) {
       }
       Value value = ValueOfClosure(closure);
       PUSH(value);
-      break;
-    }
-    case OP_INDIRECT: {
-      Value v1 = TOP;
-      Value value = indirect(v1);
-      TOP = value;
       break;
     }
     case OP_RETURN: {

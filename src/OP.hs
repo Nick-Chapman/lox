@@ -21,6 +21,9 @@ data Op
   | GET_UPVALUE
   | SET_UPVALUE
 
+  | INDIRECT
+  | DEREF
+
   | EQUAL
   | GREATER
   | LESS
@@ -39,7 +42,6 @@ data Op
 
   | CALL
   | CLOSURE
-  | INDIRECT
   | RETURN
 
   | CLOCK
@@ -59,10 +61,13 @@ encode = c2w . \case
   OP.FALSE              -> 'f'
 
   OP.POP                -> '_'
-  OP.GET_LOCAL          -> '.'
+  OP.GET_LOCAL          -> '-'
   OP.SET_LOCAL          -> ':'
   OP.GET_UPVALUE        -> ','
   OP.SET_UPVALUE        -> ';'
+
+  OP.INDIRECT           -> '&'
+  OP.DEREF              -> '*'
 
   OP.EQUAL              -> 'e'
   OP.GREATER            -> 'g'
@@ -82,7 +87,6 @@ encode = c2w . \case
 
   OP.CALL               -> 'C'
   OP.CLOSURE            -> 'F'
-  OP.INDIRECT           -> '&'
   OP.RETURN             -> 'R'
 
   OP.CLOCK              -> '@'

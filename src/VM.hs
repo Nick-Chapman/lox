@@ -44,13 +44,13 @@ dispatch pos = \case
     pure ()
   OP.GET_LOCAL -> do
     i <- FetchArg
-    r <- GetSlot i
-    v <- Effect (ReadRef r)
+    v <- GetSlot i
     Push v
+
   OP.SET_LOCAL -> do
     i <- FetchArg
     v <- Peek
-    r <- GetSlot i
+    r <- expectIndirection <$> GetSlot i
     Effect (WriteRef r v)
   OP.GET_UPVALUE -> do
     i <- FetchArg
@@ -62,6 +62,15 @@ dispatch pos = \case
     v <- Peek
     r <- GetUpValue i
     Effect (WriteRef r v)
+
+  OP.INDIRECT -> do
+    v <- Pop
+    r <- Effect (NewRef v)
+    Push (VIndirection r)
+  OP.DEREF -> do
+    r <- expectIndirection <$> Pop
+    v <- Effect (ReadRef r)
+    Push v
 
   OP.EQUAL -> do
     v2 <- Pop
@@ -103,7 +112,7 @@ dispatch pos = \case
   OP.CALL -> do
     pos <- FetchArg
     nActuals <- FetchArg
-    r <- PeekSlot (1+nActuals)
+    r <- expectIndirection <$> PeekSlot (1+nActuals)
     Effect (ReadRef r) >>= \case
       VFunc FuncDef{codePointer,upValues} -> do
         prevIP <- GetIP
@@ -128,15 +137,13 @@ dispatch pos = \case
       getClosedValue = do
         mode <- FetchArg
         i <- FetchArg
-        case mode of 1 -> GetSlot i; 2 -> GetUpValue i; _ -> error "getClosedValue/mode"
+        case mode of
+          1 -> expectIndirection <$> GetSlot i
+          2 -> GetUpValue i
+          _ -> error "getClosedValue/mode"
 
     upValues <- sequence $ replicate numUpvalues getClosedValue
     Push $ VFunc FuncDef{ codePointer = dest, upValues }
-
-  OP.INDIRECT -> do
-    v <- Pop
-    r <- Effect (NewRef v)
-    Push (VIndirection r)
 
   OP.RETURN -> do
     res <- Pop
@@ -201,8 +208,8 @@ data VM a where
   Push :: Value -> VM ()
   Pop :: VM Value
 
-  PeekSlot :: Int -> VM (Ref Value)
-  GetSlot :: Int -> VM (Ref Value)
+  PeekSlot :: Int -> VM Value
+  GetSlot :: Int -> VM Value
 
   GetConstNum :: Int -> VM Value
   GetConstStr :: Int -> VM Value
@@ -252,14 +259,14 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
       PeekSlot n -> \k -> do
         let State{items} = s
-        let ref = expectIndirection (items !! (n-1))
-        k ref s
+        let v = items !! (n-1)
+        k v s
 
       -- Get/Set are wrt to the base
       GetSlot arg -> \k -> do
         let State{base,items} = s
-        let ref = expectIndirection (reverse items !! (base + arg))
-        k ref s
+        let v = reverse items !! (base + arg)
+        k v s
 
       GetConstNum arg -> \k -> do
         let i = arg
