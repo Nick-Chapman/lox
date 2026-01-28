@@ -18,14 +18,10 @@ groups:
                                           # 239
 
 fullpath.list: @chapters
-  cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|/home/nic/other/craftinginterpreters/|' > $out
-  #echo ./lambda.lox >> $out
-  #echo ./fib-iter.lox >> $out
-  echo ./thrice.lox >> $out
-
-lambda.lox : ../examples/lambda.lox :
-fib-iter.lox : ../examples/fib-iter.lox :
-thrice.lox : ../examples/thrice.lox :
+  cat *.list | sed 's/#.*//' | grep -v '^ *$$' | sed 's|^|/home/nic/other/craftinginterpreters/|' >> $out
+  #echo /home/nic/code/lox/examples/lambda.lox >> $out
+  echo /home/nic/code/lox/examples/fib-iter.lox >> $out
+  echo /home/nic/code/lox/examples/thrice.lox >> $out
 
 # T: Tree walk interpreter.
 # H: Bytecode compiler + haskell VM.
