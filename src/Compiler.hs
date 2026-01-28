@@ -1,14 +1,13 @@
 module Compiler (compile) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..),Func(..))
-import Code (Code(..))
+import Code (Code(..),printableOffset)
 import Control.Monad (ap,liftM)
 import Control.Monad.Fix (MonadFix,mfix)
 import Data.List (sortBy)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Ord (comparing)
-import Data.Word (Word8)
 import OP (Op)
 import OP qualified
 import Pos (Pos,initPos)
@@ -92,8 +91,8 @@ compStatThen env = \case
   SFunDecl func@Func{name=fname,formals,statements} -> \k -> mdo
     let free = Set.toList $ fvFunc func
     Emit OP.CLOSURE
-    Emit (OP.ARG (fromIntegral $ length formals))
-    Emit (OP.ARG (fromIntegral $ length free))
+    Emit (smallArg (fromIntegral $ length formals))
+    Emit (smallArg (fromIntegral $ length free))
     forwards def
     sequence_ [ emitCloseVar x | x <- free ]
     Emit OP.JUMP; forwards after
@@ -116,11 +115,11 @@ compStatThen env = \case
       let pos = initPos
       lookupEnv pos name env >>= \case
         VLocal n -> do
-          Emit (OP.ARG 1)
-          Emit (OP.ARG n)
+          Emit (smallArg 1)
+          Emit (smallArg n)
         VFrame n -> do
-          Emit (OP.ARG 2)
-          Emit (OP.ARG n)
+          Emit (smallArg 2)
+          Emit (smallArg n)
 
     compExp :: Exp -> Asm ()
     compExp = \case
@@ -130,13 +129,13 @@ compStatThen env = \case
         LNumber n -> do
           i <- EmitConstNum n
           Emit OP.NUMBER
-          Emit (OP.ARG i)
+          Emit (smallArg i)
         LNil{} -> Emit OP.NIL
         LBool b -> Emit (if b then OP.TRUE else OP.FALSE)
         LString str -> do
           i <- EmitConstStr str
           Emit OP.STRING
-          Emit (OP.ARG i)
+          Emit (smallArg i)
 
       EUnary pos op e  -> do
         compExp e
@@ -163,20 +162,20 @@ compStatThen env = \case
         lookupEnv pos name env >>= \case
           VLocal n -> do
             Emit OP.GET_LOCAL
-            Emit (OP.ARG n)
+            Emit (smallArg n)
           VFrame n -> do
             Emit OP.GET_UPVALUE
-            Emit (OP.ARG n)
+            Emit (smallArg n)
 
       EAssign Identifier{pos,name} e -> do
         compExp e
         lookupEnv pos name env >>= \case
           VLocal n -> do
             Emit OP.SET_LOCAL
-            Emit (OP.ARG n)
+            Emit (smallArg n)
           VFrame n -> do
             Emit OP.SET_UPVALUE
-            Emit (OP.ARG n)
+            Emit (smallArg n)
 
       ELogicalAnd e1 e2 -> mdo
         compExp e1
@@ -201,7 +200,7 @@ compStatThen env = \case
         Emit OP.INDIRECT
         sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
         Position pos $ Emit OP.CALL
-        Emit (OP.ARG (fromIntegral $ length args))
+        Emit (smallArg (fromIntegral $ length args))
 
       EThis{} -> undefined
       ESuperVar{} -> undefined
@@ -223,14 +222,19 @@ relativize dist = do
   Emit $
     if dist < 0 then error "relativize: negative" else do
       if dist > 255 then error "relativize: too big" else do
-        OP.ARG (fromIntegral dist)
+        smallArg dist
+
+smallArg :: Int -> Op
+smallArg i =
+  if i > 93 then error "smallArg: too big" else
+    OP.ARG (fromIntegral $ printableOffset + i) -- Add 33 to get into printable ascii range: 33..126
 
 ----------------------------------------------------------------------
 -- environment
 
-data Var = VLocal Word8 | VFrame Word8
+data Var = VLocal Int | VFrame Int
 
-data Env = Env { d :: Word8, m :: Map String Var }
+data Env = Env { d :: Int, m :: Map String Var }
 
 emptyEnv :: Env
 emptyEnv = Env { d = 0, m = Map.empty }
@@ -315,8 +319,8 @@ data Asm a where
   Bind :: Asm a -> (a -> Asm b) -> Asm b
   Position :: Pos -> Asm a -> Asm a
   Emit :: Op -> Asm ()
-  EmitConstNum :: Double -> Asm Word8
-  EmitConstStr :: String -> Asm Word8
+  EmitConstNum :: Double -> Asm Int
+  EmitConstStr :: String -> Asm Int
   Error :: Pos -> String -> Asm ()
   Here :: Asm Int
   Fix :: (a -> Asm a) -> Asm a

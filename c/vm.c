@@ -332,6 +332,10 @@ void run_code(Code code) {
 #define PUSH(d) (*sp++ = (d))
 #define POP (*--sp)
 
+#define printableOffset 32 // must match Code.hs
+
+#define ARG ((*ip++) - printableOffset)
+
   u8* ip = code.ip_start;
   int step = 0;
 
@@ -346,14 +350,14 @@ void run_code(Code code) {
     switch (op_code) {
 
     case OP_NUMBER: {
-      u8 arg = *ip++;
+      u8 arg = ARG;
       double d = code.doubles[arg];
       Value value = ValueOfDouble(d);
       PUSH(value);
       break;
     }
     case OP_STRING: {
-      u8 arg = *ip++;
+      u8 arg = ARG;
       u16 length = code.string_length[arg];
       char* payload = code.string_payload[arg];
       ObjString* string = makeString(length,payload);
@@ -381,25 +385,25 @@ void run_code(Code code) {
       break;
     }
     case OP_GET_LOCAL: {
-      u8 arg = *ip++;
+      u8 arg = ARG;
       Value value = AsIndirection(base[arg])->value;
       PUSH(value);
       break;
     }
     case OP_SET_LOCAL: {
-      u8 arg = *ip++;
+      u8 arg = ARG;
       Value value = sp[-1]; //peek
       AsIndirection(base[arg])->value = value;
       break;
     }
     case OP_GET_UPVALUE: {
-      u8 arg = *ip++;
+      u8 arg = ARG;
       Value value = AsIndirection(ups[arg])->value;
       PUSH(value);
       break;
     }
     case OP_SET_UPVALUE: {
-      u8 arg = *ip++;
+      u8 arg = ARG;
       Value value = sp[-1]; //peek
       AsIndirection(ups[arg])->value = value;
       break;
@@ -469,24 +473,24 @@ void run_code(Code code) {
       break;
     }
     case OP_JUMP: {
-      u8 dist = *ip++;
+      u8 dist = ARG;
       ip += dist;
       break;
     }
     case OP_JUMP_IF_FALSE: {
-      u8 dist = *ip++;
+      u8 dist = ARG;
       Value value = sp[-1]; //peek
       bool taken = is_falsey(value);
       if (taken) ip += dist;
       break;
     }
     case OP_LOOP: {
-      u8 dist = *ip++;
+      u8 dist = ARG;
       ip -= dist;
       break;
     }
     case OP_CALL: {
-      u8 num_actuals = *ip++;
+      u8 num_actuals = ARG;
       Value callee = AsIndirection(sp[-1-num_actuals])->value;
       if (!IsClosure(callee)) {
         runtime_error("Can only call functions and classes.");
@@ -506,14 +510,14 @@ void run_code(Code code) {
       break;
     }
     case OP_CLOSURE: {
-      u8 arity = *ip++;
-      u8 num_ups = *ip++;
-      u8 dist = *ip++;
+      u8 arity = ARG;
+      u8 num_ups = ARG;
+      u8 dist = ARG;
       u8* code = ip + dist;
       ObjClosure* closure = makeClosure(arity,code,num_ups);
       for (int u = 0; u < num_ups; u++) {
-        u8 mode = *ip++;
-        u8 arg = *ip++;
+        u8 mode = ARG;
+        u8 arg = ARG;
         switch (mode) {
         case 1: {
           Value value = base[arg];

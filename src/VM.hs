@@ -1,9 +1,8 @@
 module VM (runCode) where
 
-import Code (Code(..))
+import Code (Code(..),printableOffset)
 import Control.Monad (ap,liftM)
 import Data.List (isSuffixOf)
-import Data.Word (Word8)
 import OP (Op)
 import OP qualified
 import Pos (Pos)
@@ -151,7 +150,7 @@ dispatch pos = \case
 
   where
 
-  checkArity :: Word8 -> Word8 -> Eff ()
+  checkArity :: Int -> Int -> Eff ()
   checkArity nformals nargs =
     if nformals == nargs then pure () else
       Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
@@ -180,28 +179,28 @@ data VM a where
   PushStack :: LR -> VM ()
   PopStack :: VM LR
 
-  PeekSlot :: Word8 -> VM (Ref Value)
-  GetSlot :: Word8 -> VM (Ref Value)
+  PeekSlot :: Int -> VM (Ref Value)
+  GetSlot :: Int -> VM (Ref Value)
 
-  GetConstNum :: Word8 -> VM Value
-  GetConstStr :: Word8 -> VM Value
+  GetConstNum :: Int -> VM Value
+  GetConstStr :: Int -> VM Value
   Fetch :: VM (Maybe (Pos,Op))
-  FetchArg :: VM Word8
+  FetchArg :: VM Int
   ModIP :: (Int -> Int) -> VM ()
   GetIP :: VM Int
   SetIP :: Int -> VM ()
-  GetDepth :: VM Word8
-  SetDepth :: Word8 -> VM ()
+  GetDepth :: VM Int
+  SetDepth :: Int -> VM ()
 
-  GetBase :: VM Word8
-  SetBase :: Word8 -> VM ()
+  GetBase :: VM Int
+  SetBase :: Int -> VM ()
   PushCallFrame :: CallFrame -> VM ()
   PopCallFrame :: VM CallFrame
 
   GetUps :: VM [Ref Value]
   SetUps :: [Ref Value] -> VM ()
 
-  GetUpValue :: Word8 -> VM (Ref Value)
+  GetUpValue :: Int -> VM (Ref Value)
 
   DebugStack :: VM ()
 
@@ -237,17 +236,19 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
         k ref s
 
       -- Get/Set are wrt to the base
-      GetSlot i -> \k -> do
+      GetSlot arg -> \k -> do
         let State{base,items} = s
-        let ref = expectL (reverse items !! (fromIntegral (base+i)))
+        let ref = expectL (reverse items !! (fromIntegral (base + arg)))
         k ref s
 
-      GetConstNum i -> \k -> do
+      GetConstNum arg -> \k -> do
+        let i = arg
         if fromIntegral i >= length numbers then error (show ("GetConstNum",i)) else do
           let v = case numbers !! fromIntegral i of
                     n -> VNumber n
           k v s
-      GetConstStr i -> \k -> do
+      GetConstStr arg -> \k -> do
+        let i = arg
         if fromIntegral i >= length strings then error (show ("GetConstStr",i)) else do
           let v = case strings !! fromIntegral i of
                     str -> VString str
@@ -261,7 +262,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       FetchArg -> \k -> do
         let State{ip} = s
         case chunk !! ip of
-          (_,OP.ARG i) -> k i s { ip = ip + 1 }
+          (_,OP.ARG i) -> k (fromIntegral i - printableOffset) s { ip = ip + 1 }
           _ -> error "FetchArg"
 
       ModIP g -> \k -> do
@@ -304,9 +305,9 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       SetUps ups -> \k -> do
         k () s { ups }
 
-      GetUpValue i -> \k -> do
+      GetUpValue arg -> \k -> do
         let State{ups} = s
-        let r = ups !! (fromIntegral i)
+        let r = ups !! fromIntegral arg
         k r s
 
       DebugStack -> \k -> do
@@ -316,7 +317,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 data State = State
   { ip :: Int
   , items :: [LR]
-  , base :: Word8
+  , base :: Int
   , ups :: [Ref Value]
   , callStack :: [CallFrame]
   }
@@ -343,7 +344,7 @@ instance Show LR where
     L{} -> "L"
     R v -> show v
 
-data CallFrame = CallFrame { prevIP :: Int, prevBase :: Word8, prevUps :: [Ref Value] }
+data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Ref Value] }
 
 ----------------------------------------------------------------------
 -- copy and paste of primitive values and operations; add VCodePointer
@@ -354,7 +355,7 @@ data Value
   | VString String
   | VFunc FuncDef
 
-data FuncDef = FuncDef  { codePointer :: Int, arity :: Word8, upValues :: [Ref Value] }
+data FuncDef = FuncDef  { codePointer :: Int, arity :: Int, upValues :: [Ref Value] }
 
 instance Show Value where
   show = \case
