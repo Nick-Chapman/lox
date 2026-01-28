@@ -90,14 +90,12 @@ ObjIndirection* makeIndirection(Value value) {
 // ObjClosure
 
 typedef struct ObjClosure {
-  u8 arity; // TODO: could be inlined in the code
   u8* code;
   Value ups[]; // "up values"
 } ObjClosure;
 
-ObjClosure* makeClosure(u8 arity, u8* code, u8 num_ups) {
+ObjClosure* makeClosure(u8* code, u8 num_ups) {
   ObjClosure* closure = malloc(sizeof(ObjClosure) + num_ups * sizeof(Value)); // TODO: leak
-  closure->arity = arity;
   closure->code = code;
   return closure;
 }
@@ -499,25 +497,24 @@ void run_code(Code code) {
         runtime_error("Can only call functions and classes.");
       }
       ObjClosure* closure = AsClosure(callee);
-      int arity = closure->arity;
+      CallFrame cf = { .ip = ip, .base = base, .ups = ups };
+      frames[frame_depth++] = cf;
+      base = sp - num_actuals - 1;
+      ups = closure->ups;
+      ip = closure->code;
+      u8 arity = ARG;
       if (num_actuals != arity) {
         char buf[80];
         sprintf(buf,"Expected %d arguments but got %d.",arity,num_actuals);
         runtime_error(buf);
       }
-      CallFrame cf = { .ip = ip, .base = base, .ups = ups };
-      frames[frame_depth++] = cf;
-      base = sp - num_actuals - 1;
-      ip = closure->code;
-      ups = closure->ups;
       break;
     }
     case OP_CLOSURE: {
-      u8 arity = ARG;
       u8 num_ups = ARG;
       u8 dist = ARG;
       u8* code = ip + dist;
-      ObjClosure* closure = makeClosure(arity,code,num_ups);
+      ObjClosure* closure = makeClosure(code,num_ups);
       for (int u = 0; u < num_ups; u++) {
         u8 mode = ARG;
         u8 arg = ARG;

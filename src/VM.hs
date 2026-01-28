@@ -102,21 +102,21 @@ dispatch pos = \case
     nActuals <- FetchArg
     r <- PeekSlot (1+nActuals)
     Effect (ReadRef r) >>= \case
-      VFunc FuncDef{codePointer=newIP,arity=nFormals,upValues} -> do
-        Effect (checkArity nFormals nActuals)
+      VFunc FuncDef{codePointer,upValues} -> do
         prevIP <- GetIP
         prevBase <- GetBase
         prevUps <- GetUps
         PushCallFrame CallFrame { prevIP, prevBase, prevUps }
         d <- GetDepth
         SetBase (d - nActuals - 1)
-        SetIP newIP
         SetUps upValues
+        SetIP codePointer
+        nFormals <- FetchArg
+        Effect (checkArity nFormals nActuals)
       _v -> do
         Effect (Runtime.Error pos "Can only call functions and classes.")
 
   OP.CLOSURE -> do
-    arity <- FetchArg
     numUpvalues <- FetchArg
     off <- FetchArg
     dest <- (+ fromIntegral off) <$> GetIP
@@ -128,7 +128,7 @@ dispatch pos = \case
         case mode of 1 -> GetSlot i; 2 -> GetUpValue i; _ -> error "getClosedValue/mode"
 
     upValues <- sequence $ replicate (fromIntegral numUpvalues) getClosedValue
-    Push $ VFunc FuncDef{ codePointer = dest, arity, upValues }
+    Push $ VFunc FuncDef{ codePointer = dest, upValues }
 
   OP.INDIRECT -> do
     v <- Pop
@@ -355,7 +355,7 @@ data Value
   | VString String
   | VFunc FuncDef
 
-data FuncDef = FuncDef  { codePointer :: Int, arity :: Int, upValues :: [Ref Value] }
+data FuncDef = FuncDef  { codePointer :: Int, upValues :: [Ref Value] }
 
 instance Show Value where
   show = \case

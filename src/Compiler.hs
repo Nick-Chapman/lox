@@ -91,12 +91,13 @@ compStatThen env = \case
   SFunDecl func@Func{name=fname,formals,statements} -> \k -> mdo
     let free = Set.toList $ fvFunc func
     Emit OP.CLOSURE
-    Emit (smallArg (fromIntegral $ length formals))
-    Emit (smallArg (fromIntegral $ length free))
+    Emit (smallArg (length free))
     forwards def
     sequence_ [ emitCloseVar x | x <- free ]
     Emit OP.JUMP; forwards after
     def <- Here
+    let arity = length formals
+    Emit (smallArg arity)
     let subEnv = foldl (flip insertEnv) (frameEnv free) (fname:formals)
     compStats subEnv statements
     Emit OP.NIL
