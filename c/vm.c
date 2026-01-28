@@ -351,7 +351,7 @@ void run_code(Code code) {
 #define POP (*--sp)
 #define TOP (sp[-1])
 
-#define printableOffset 32 // must match Code.hs
+#define printableOffset 0 // must match Code.hs
 
 #define ARG ((*ip++) - printableOffset)
 

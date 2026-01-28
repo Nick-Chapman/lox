@@ -5,12 +5,13 @@ import Data.ByteString.Internal (w2c,c2w)
 import Data.Word (Word8)
 
 printableOffset :: Int
-printableOffset = 32
+printableOffset = 0
 
 data Op
 
   = NUMBER
   | STRING
+
   | NIL
   | TRUE
   | FALSE
@@ -32,6 +33,7 @@ data Op
   | NEGATE
 
   | PRINT
+
   | JUMP
   | JUMP_IF_FALSE
   | LOOP
@@ -43,7 +45,7 @@ data Op
 
   | CLOCK
 
-  | ARG Word8
+  | ARG Int
   deriving Show
 
 
@@ -86,4 +88,6 @@ encode = c2w . \case
 
   OP.CLOCK              -> '@'
 
-  OP.ARG byte           -> w2c (fromIntegral printableOffset + byte)
+  OP.ARG byte -> do
+    if byte < 0 || byte > 93 then error (show ("encode/OP.ARG",byte)) else
+      w2c (fromIntegral (printableOffset + byte))

@@ -42,7 +42,7 @@ getArgs op pops = loop [] pops descs0
       desc:descs ->
         case pops of
           [] -> error "getArgs/[]"
-          (_pos,OP.ARG n):pops -> loop ((fromIntegral n,desc) : acc) pops descs
+          (_pos,OP.ARG n):pops -> loop ((n,desc) : acc) pops descs
           _:_ -> error "getArgs/not-arg"
 
 data ArgDesc = N | D

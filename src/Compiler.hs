@@ -27,12 +27,12 @@ nativeClock env k = mdo
   let arity = 0
   let numFree = 0
   Emit OP.CLOSURE
-  Emit (smallArg numFree)
+  Emit (OP.ARG numFree)
   forwards def
   Emit OP.JUMP; forwards after
 
   def <- Here
-  Emit (smallArg arity)
+  Emit (OP.ARG arity)
   Emit OP.CLOCK
   Emit OP.RETURN
 
@@ -112,13 +112,13 @@ compStatThen env = \case
   SFunDecl func@Func{name=fname,formals,statements} -> \k -> mdo
     let free = Set.toList $ fvFunc func
     Emit OP.CLOSURE
-    Emit (smallArg (length free))
+    Emit (OP.ARG (length free))
     forwards def
     sequence_ [ emitCloseVar x | x <- free ]
     Emit OP.JUMP; forwards after
     def <- Here
     let arity = length formals
-    Emit (smallArg arity)
+    Emit (OP.ARG arity)
     let subEnv = foldl (flip insertEnv') (frameEnv free) (fname:formals)
     compStats subEnv statements
     Emit OP.NIL
@@ -137,11 +137,11 @@ compStatThen env = \case
       let pos = initPos
       lookupEnv pos name env >>= \case
         VLocal n -> do
-          Emit (smallArg 1)
-          Emit (smallArg n)
+          Emit (OP.ARG 1)
+          Emit (OP.ARG n)
         VFrame n -> do
-          Emit (smallArg 2)
-          Emit (smallArg n)
+          Emit (OP.ARG 2)
+          Emit (OP.ARG n)
 
     compExp :: Exp -> Asm ()
     compExp = \case
@@ -151,13 +151,13 @@ compStatThen env = \case
         LNumber n -> do
           i <- EmitConstNum n
           Emit OP.NUMBER
-          Emit (smallArg i)
+          Emit (OP.ARG i)
         LNil{} -> Emit OP.NIL
         LBool b -> Emit (if b then OP.TRUE else OP.FALSE)
         LString str -> do
           i <- EmitConstStr str
           Emit OP.STRING
-          Emit (smallArg i)
+          Emit (OP.ARG i)
 
       EUnary pos op e  -> do
         compExp e
@@ -184,20 +184,20 @@ compStatThen env = \case
         lookupEnv pos name env >>= \case
           VLocal n -> do
             Emit OP.GET_LOCAL
-            Emit (smallArg n)
+            Emit (OP.ARG n)
           VFrame n -> do
             Emit OP.GET_UPVALUE
-            Emit (smallArg n)
+            Emit (OP.ARG n)
 
       EAssign Identifier{pos,name} e -> do
         compExp e
         lookupEnv pos name env >>= \case
           VLocal n -> do
             Emit OP.SET_LOCAL
-            Emit (smallArg n)
+            Emit (OP.ARG n)
           VFrame n -> do
             Emit OP.SET_UPVALUE
-            Emit (smallArg n)
+            Emit (OP.ARG n)
 
       ELogicalAnd e1 e2 -> mdo
         compExp e1
@@ -222,7 +222,7 @@ compStatThen env = \case
         Emit OP.INDIRECT
         sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
         Position pos $ Emit OP.CALL
-        Emit (smallArg (length args))
+        Emit (OP.ARG (length args))
 
       EThis{} -> undefined
       ESuperVar{} -> undefined
@@ -244,13 +244,7 @@ relativize dist = do
   Emit $
     if dist < 0 then error "relativize: negative" else do
       if dist > 255 then error "relativize: too big" else do
-        smallArg dist
-
-smallArg :: Int -> Op
-smallArg i =
-  -- Add 33 to get into printable ascii range: 33..126
-  if i > 93 then error "smallArg: too big" else
-    OP.ARG (fromIntegral i)
+        OP.ARG dist
 
 ----------------------------------------------------------------------
 -- environment
