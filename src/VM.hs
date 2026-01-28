@@ -6,7 +6,7 @@ import Data.List (isSuffixOf)
 import OP (Op)
 import OP qualified
 import Pos (Pos)
-import Runtime (Ref,Eff(Print,Error,NewRef,ReadRef,WriteRef))
+import Runtime (Ref,Eff(Clock,Print,Error,NewRef,ReadRef,WriteRef))
 import Text.Printf (printf)
 
 runCode :: Code -> Eff ()
@@ -144,6 +144,10 @@ dispatch pos = \case
     SetUps prevUps
     SetDepth base
     Push res
+
+  OP.CLOCK -> do
+    n <- Effect (Runtime.Clock)
+    Push (VNumber n)
 
   OP.ARG{} ->
     error "dispatch/OP_ARG"

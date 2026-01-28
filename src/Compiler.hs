@@ -17,7 +17,28 @@ import Data.Set (Set,(\\),union,singleton)
 
 
 compile :: [Stat] -> Either (Pos,String) Code
-compile decls = runAsm (compStats emptyEnv decls)
+compile decls = do
+  runAsm $ do
+    nativeClock emptyEnv $ \globals -> do
+      compStats globals decls
+
+nativeClock :: Env -> (Env -> Asm ()) -> Asm ()
+nativeClock env k = mdo
+  let arity = 0
+  let numFree = 0
+  Emit OP.CLOSURE
+  Emit (smallArg numFree)
+  forwards def
+  Emit OP.JUMP; forwards after
+
+  def <- Here
+  Emit (smallArg arity)
+  Emit OP.CLOCK
+  Emit OP.RETURN
+
+  after <- Here
+  Emit OP.INDIRECT
+  k (insertEnv "clock" env)
 
 compStats :: Env -> [Stat] -> Asm ()
 compStats env = \case
@@ -79,7 +100,7 @@ compStatThen env = \case
   SVarDecl x e -> \k -> do
     compExp e
     Emit OP.INDIRECT
-    k (insertEnv x env)
+    k (insertEnv' x env)
     Emit OP.POP
 
   SReturn _pos expOpt -> \_ignoreK -> do
@@ -98,13 +119,13 @@ compStatThen env = \case
     def <- Here
     let arity = length formals
     Emit (smallArg arity)
-    let subEnv = foldl (flip insertEnv) (frameEnv free) (fname:formals)
+    let subEnv = foldl (flip insertEnv') (frameEnv free) (fname:formals)
     compStats subEnv statements
     Emit OP.NIL
     Emit OP.RETURN
     after <- Here
     Emit OP.INDIRECT
-    k (insertEnv fname env)
+    k (insertEnv' fname env)
     Emit OP.POP
 
   SClassDecl{} -> do undefined
@@ -151,13 +172,13 @@ compStatThen env = \case
           Add -> Emit OP.ADD
           Sub -> Emit OP.SUBTRACT
           Mul -> Emit OP.MULTIPLY
-          Div{} -> Emit OP.DIVIDE
-          Equals{} -> Emit OP.EQUAL
-          NotEquals{} -> do Emit OP.EQUAL; Emit OP.NOT
-          Less{} -> Emit OP.LESS
-          LessEqual{} -> do Emit OP.GREATER; Emit OP.NOT
-          Greater{} -> Emit OP.GREATER
-          GreaterEqual{} -> do Emit OP.LESS; Emit OP.NOT
+          Div -> Emit OP.DIVIDE
+          Equals -> Emit OP.EQUAL
+          NotEquals -> do Emit OP.EQUAL; Emit OP.NOT
+          Less -> Emit OP.LESS
+          LessEqual -> do Emit OP.GREATER; Emit OP.NOT
+          Greater -> Emit OP.GREATER
+          GreaterEqual -> do Emit OP.LESS; Emit OP.NOT
 
       EVar Identifier{pos,name} -> do
         lookupEnv pos name env >>= \case
@@ -243,8 +264,12 @@ emptyEnv = Env { d = 0, m = Map.empty }
 frameEnv :: [String] -> Env
 frameEnv xs = Env { d = 0, m = Map.fromList [ (x,VFrame n) | (n,x) <- zip [0..] xs] }
 
-insertEnv :: Identifier -> Env -> Env
-insertEnv Identifier{name} Env{d,m} =
+insertEnv' :: Identifier -> Env -> Env
+insertEnv' Identifier{name} env =
+  insertEnv name env
+
+insertEnv :: String -> Env -> Env
+insertEnv name Env{d,m} =
   Env {d = d+1, m = Map.insert name (VLocal d) m}
 
 lookupEnv :: Pos -> String -> Env -> Asm Var

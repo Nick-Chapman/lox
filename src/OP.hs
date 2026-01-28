@@ -38,6 +38,8 @@ data Op
   | INDIRECT
   | RETURN
 
+  | CLOCK
+
   | ARG Word8
   deriving Show
 
@@ -78,5 +80,7 @@ encode = c2w . \case
   OP.CLOSURE            -> 'F'
   OP.INDIRECT           -> '&'
   OP.RETURN             -> 'R'
+
+  OP.CLOCK              -> '@'
 
   OP.ARG byte           -> w2c byte

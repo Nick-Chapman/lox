@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 typedef unsigned char u8;
 typedef unsigned short u16;
@@ -46,6 +47,8 @@ typedef enum {
   OP_CLOSURE            = 'F',
   OP_INDIRECT           = '&',
   OP_RETURN             = 'R',
+
+  OP_CLOCK              = '@',
 
 } OpCode;
 
@@ -542,6 +545,12 @@ void run_code(Code code) {
       ip = cf.ip;
       base = cf.base;
       ups = cf.ups;
+      PUSH(value);
+      break;
+    }
+    case OP_CLOCK: {
+      double d = ((double)clock() / CLOCKS_PER_SEC);
+      Value value = ValueOfDouble(d);
       PUSH(value);
       break;
     }

@@ -1,0 +1,27 @@
+
+fun fib(n) {
+ if (n < 2) {
+   return n;
+ } else {
+   return fib(n-1) + fib(n-2);
+ }
+}
+
+var max = 30;
+
+// Crafting reference...
+// jlox: 1.43s
+// clox: 0.13
+
+// My versions...
+// T: tlox: 3.2s
+// H: hlox: VERY SLOW (Haskell VM.hs)
+// C: lox:  0.76 -- TODO: check I am compiling with optimization flags!
+
+var start = clock();
+var i = 0;
+while (i <= max) {
+  print fib(i);
+  i = 1+i;
+}
+print clock() - start;
