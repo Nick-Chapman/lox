@@ -89,14 +89,14 @@ dispatch pos = \case
     Effect (Runtime.Print (show v))
   OP.JUMP -> do
     i <- FetchArg
-    ModIP (+ fromIntegral i)
+    ModIP (+ i)
   OP.JUMP_IF_FALSE -> do
     i <- FetchArg
     v <- Peek
-    if isTruthy v then pure () else ModIP (+ fromIntegral i)
+    if isTruthy v then pure () else ModIP (+ i)
   OP.LOOP -> do
     i <- FetchArg
-    ModIP (\x -> x - fromIntegral i)
+    ModIP (\x -> x - i)
 
   OP.CALL -> do
     nActuals <- FetchArg
@@ -119,7 +119,7 @@ dispatch pos = \case
   OP.CLOSURE -> do
     numUpvalues <- FetchArg
     off <- FetchArg
-    dest <- (+ fromIntegral off) <$> GetIP
+    dest <- (+ off) <$> GetIP
     let
       getClosedValue :: VM (Ref Value)
       getClosedValue = do
@@ -127,7 +127,7 @@ dispatch pos = \case
         i <- FetchArg
         case mode of 1 -> GetSlot i; 2 -> GetUpValue i; _ -> error "getClosedValue/mode"
 
-    upValues <- sequence $ replicate (fromIntegral numUpvalues) getClosedValue
+    upValues <- sequence $ replicate numUpvalues getClosedValue
     Push $ VFunc FuncDef{ codePointer = dest, upValues }
 
   OP.INDIRECT -> do
@@ -232,25 +232,25 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
       PeekSlot n -> \k -> do
         let State{items} = s
-        let ref = expectL (items !! fromIntegral (n-1))
+        let ref = expectL (items !! (n-1))
         k ref s
 
       -- Get/Set are wrt to the base
       GetSlot arg -> \k -> do
         let State{base,items} = s
-        let ref = expectL (reverse items !! (fromIntegral (base + arg)))
+        let ref = expectL (reverse items !! (base + arg))
         k ref s
 
       GetConstNum arg -> \k -> do
         let i = arg
-        if fromIntegral i >= length numbers then error (show ("GetConstNum",i)) else do
-          let v = case numbers !! fromIntegral i of
+        if i >= length numbers then error (show ("GetConstNum",i)) else do
+          let v = case numbers !! i of
                     n -> VNumber n
           k v s
       GetConstStr arg -> \k -> do
         let i = arg
-        if fromIntegral i >= length strings then error (show ("GetConstStr",i)) else do
-          let v = case strings !! fromIntegral i of
+        if i >= length strings then error (show ("GetConstStr",i)) else do
+          let v = case strings !! i of
                     str -> VString str
           k v s
 
@@ -276,11 +276,11 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
       GetDepth -> \k -> do
         let State{items} = s
-        let depth = fromIntegral $ length items
+        let depth = length items
         k depth s
       SetDepth depth -> \k -> do
         let State{items} = s
-        let items' = drop (length items - fromIntegral depth) items
+        let items' = drop (length items - depth) items
         k () s { items = items' }
 
       GetBase -> \k -> do
@@ -307,7 +307,7 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
       GetUpValue arg -> \k -> do
         let State{ups} = s
-        let r = ups !! fromIntegral arg
+        let r = ups !! arg
         k r s
 
       DebugStack -> \k -> do

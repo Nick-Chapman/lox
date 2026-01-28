@@ -201,7 +201,7 @@ compStatThen env = \case
         Emit OP.INDIRECT
         sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
         Position pos $ Emit OP.CALL
-        Emit (smallArg (fromIntegral $ length args))
+        Emit (smallArg (length args))
 
       EThis{} -> undefined
       ESuperVar{} -> undefined
@@ -353,10 +353,10 @@ runAsm m = finish (loop initPos emptyTabN emptyTabS 0 m)
       Emit op -> ((),tn,ts,[(pos,op)],[])
       EmitConstNum n -> do
         let (tn',i) = insertTabN n tn
-        (fromIntegral i,tn',ts,[],[])
+        (i,tn',ts,[],[])
       EmitConstStr s -> do
         let (ts',i) = insertTabS s ts
-        (fromIntegral i,tn,ts',[],[])
+        (i,tn,ts',[],[])
       Error pos mes -> ((),tn,ts,[],[(pos,mes)])
       Here -> (q,tn,ts,[],[])
       Fix f -> do

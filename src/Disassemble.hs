@@ -1,10 +1,9 @@
 module Disassemble (dis) where
 
-import Code (Code(..))
+import Code (Code(..),printableOffset)
 import OP (Op)
 import OP qualified
 import Pos (Pos)
-import Data.Word (Word8)
 import Data.List (intercalate)
 import Text.Printf (printf)
 
@@ -14,6 +13,9 @@ dis Code{chunk=ops} = loop 0 ops
     loop :: Int -> [(Pos,Op)] -> String
     loop ip = \case
       [] -> ""
+      (_,OP.ARG i):pops -> do
+        printf "%d: %d\n%s" ip (fromIntegral i - printableOffset) (loop (ip+1) pops)
+
       (_,op):pops -> do
         let (args,pops') = getArgs op pops
         let n = length args
@@ -26,12 +28,12 @@ dis Code{chunk=ops} = loop 0 ops
         printf "%d: %s%s\n%s" ip (show op) argString (loop (ip+1+n) pops')
 
 
-decode :: Int -> (Word8,ArgDesc) -> String
+decode :: Int -> (Int,ArgDesc) -> String
 decode ip (n,desc) = case desc of
-  N -> printf "%d" n
-  D -> printf "LAB-%d" (ip + fromIntegral n - 128)
+  N -> printf "%d" (n - printableOffset)
+  D -> printf "LAB-%d" (ip + fromIntegral n - printableOffset)
 
-getArgs :: Op -> [(Pos,Op)] -> ([(Word8,ArgDesc)], [(Pos,Op)])
+getArgs :: Op -> [(Pos,Op)] -> ([(Int,ArgDesc)], [(Pos,Op)])
 getArgs op pops = loop [] pops descs0
   where
     descs0 = argsDescs op
@@ -40,7 +42,7 @@ getArgs op pops = loop [] pops descs0
       desc:descs ->
         case pops of
           [] -> error "getArgs/[]"
-          (_pos,OP.ARG n):pops -> loop ((n,desc) : acc) pops descs
+          (_pos,OP.ARG n):pops -> loop ((fromIntegral n,desc) : acc) pops descs
           _:_ -> error "getArgs/not-arg"
 
 data ArgDesc = N | D
