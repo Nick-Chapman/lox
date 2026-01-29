@@ -29,11 +29,11 @@ fullpath.list: @chapters
 
 T.sh :: echo './lox.exe -tree $$@' >> $out; chmod +x $out
 H.sh :: echo './lox.exe -bci $$@' >> $out; chmod +x $out
-C.sh :: echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out; chmod +x $out
+X.sh :: echo './lox.exe -export code.bin $$@ && ./vm.exe code.bin' >> $out; chmod +x $out
 
 deps-for-T :: echo ../src/lox.exe >> $out
 deps-for-H :: echo ../src/lox.exe >> $out
-deps-for-C :: echo ../src/lox.exe ../c/vm.exe >> $out
+deps-for-X :: echo ../src/lox.exe ../c/vm.exe >> $out
 
 rules : fullpath.list rules.sh
   ./rules.sh < $in > $out

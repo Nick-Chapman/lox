@@ -26,11 +26,11 @@ $x.H : H.sh @deps-for-H $x.lox looseSecondaryErrors.sh
 *test-H-$x: $x.expect $x.H
   git diff --text --color $x.expect $x.H
 
-$x.C : C.sh @deps-for-C $x.lox looseSecondaryErrors.sh
-  ./C.sh $x.lox 2>err >$x.C; cat err | ./looseSecondaryErrors.sh >>$x.C
+$x.X : X.sh @deps-for-X $x.lox looseSecondaryErrors.sh
+  ./X.sh $x.lox 2>err >$x.X; cat err | ./looseSecondaryErrors.sh >>$x.X
 
-*test-C-$x: $x.expect $x.C
-  git diff --text --color $x.expect $x.C
+*test-X-$x: $x.expect $x.X
+  git diff --text --color $x.expect $x.X
 
 EOF
 
