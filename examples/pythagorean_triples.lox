@@ -33,7 +33,7 @@ fun upto (a,b) {
 }
 
 fun print_list(xs) {
-  fun e() { print "end"; }
+  fun e() { }
   fun c(x,xs) { print x; print_list(xs); }
   xs(e,c);
 }
@@ -57,10 +57,7 @@ fun pythagorean_triples(n) {
   return bind(upto(1,n),f);
 }
 
-var max = 19; // jlox,clox,tlox -- all good
-//var max = 17; // clox -- stack overflow
-
-// hlox: (stderr) lox.exe: relativize: too big
+var max = 16;
 
 print_list(pythagorean_triples(max));
-print clock() - start;
+//print clock() - start;

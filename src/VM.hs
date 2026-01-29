@@ -91,15 +91,15 @@ dispatch pos = \case
     str <- seeValue v
     Effect (Runtime.Print str)
   OP.JUMP -> do
-    i <- FetchArg
-    ModIP (+ i)
+    dist <- fetchShort
+    ModIP (+ dist) --forwards
   OP.JUMP_IF_FALSE -> do
-    i <- FetchArg
+    dist <- fetchShort
     v <- Peek
-    if isTruthy v then pure () else ModIP (+ i)
+    if isTruthy v then pure () else ModIP (+ dist) --forwards
   OP.LOOP -> do
-    i <- FetchArg
-    ModIP (\x -> x - i)
+    dist <- fetchShort
+    ModIP (\x -> x - dist) --bacwards
 
   OP.CALL -> do
     pos <- FetchArg
@@ -122,8 +122,8 @@ dispatch pos = \case
 
   OP.CLOSURE -> do
     numUpvalues <- FetchArg
-    off <- FetchArg
-    codePointer <- (+ off) <$> GetIP
+    dist <- fetchShort
+    codePointer <- (+ dist) <$> GetIP
     let
       collectUpValue :: VM Value
       collectUpValue = do
@@ -168,6 +168,12 @@ dispatch pos = \case
     n <- Effect (binary pos f v1 v2)
     Push (mk n)
 
+fetchShort :: VM Int
+fetchShort = do
+  hi <- FetchArg
+  lo <- FetchArg
+  let dist = 256 * hi + lo
+  pure dist
 
 seeValue :: Value -> VM String
 seeValue = \case

@@ -244,21 +244,28 @@ compStatThen env = \case
       ESetProp{} -> undefined
 
 forwards :: Int -> Asm ()
-forwards a = do
+forwards a = mdo
+  emitShortRelativeDistance (a - b)
   b <- Here
-  relativize (a - b - 1)
+  pure ()
 
 backwards :: Int -> Asm ()
-backwards a = do
+backwards a = mdo
+  emitShortRelativeDistance (- (a - b))
   b <- Here
-  relativize (- (a - b - 1))
+  pure ()
 
-relativize :: Int -> Asm ()
-relativize dist = do
-  Emit $
-    if dist < 0 then error "relativize: negative" else do
-      if dist > 255 then error "relativize: too big" else do
-        OP.ARG dist
+emitShortRelativeDistance :: Int -> Asm ()
+emitShortRelativeDistance dist = do
+  let lo = dist `mod` 256
+  let hi = dist `div` 256
+  Emit (OP.ARG $ check hi)
+  Emit (OP.ARG $ check lo)
+    where
+      check x =
+        if dist < 0 then error "emitShortRelativeDistance: negative" else
+          if dist > 65535 then error "emitShortRelativeDistance: too big" else
+            x
 
 embedFunctionName :: String -> Asm ()
 embedFunctionName printName = do

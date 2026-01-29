@@ -338,7 +338,7 @@ typedef struct {
 // VM state (except for ip)
 
 #define STACK_SIZE 2000
-#define CALLSTACK_SIZE 100
+#define CALLSTACK_SIZE 1000
 
 typedef struct {
   // value stack:
@@ -376,10 +376,12 @@ void push(VM* vm, Value value) {
 
 void run_code(Code code,VM* vm) {
 
-# define ARG (*ip++)
 # define PUSH(d) (push(vm,d))
 # define POP (pop(vm))
 # define TOP (vm->sp[-1])
+
+# define ARG (*ip++)
+# define SHORT ({ u16 res = ip[1] + 256*ip[0]; ip += 2; res; })
 
   u8* ip = code.ip_start;
   int step = 0;
@@ -516,19 +518,19 @@ void run_code(Code code,VM* vm) {
       break;
     }
     case OP_JUMP: {
-      u8 dist = ARG;
+      u16 dist = SHORT;
       ip += dist;
       break;
     }
     case OP_JUMP_IF_FALSE: {
-      u8 dist = ARG;
+      u8 dist = SHORT;
       Value value = TOP; //peek
       bool taken = is_falsey(value);
       if (taken) ip += dist;
       break;
     }
     case OP_LOOP: {
-      u8 dist = ARG;
+      u16 dist = SHORT;
       ip -= dist;
       break;
     }
@@ -556,7 +558,7 @@ void run_code(Code code,VM* vm) {
     }
     case OP_CLOSURE: {
       u8 num_ups = ARG;
-      u8 dist = ARG;
+      u8 dist = SHORT;
       u8* code = ip + dist;
       ObjClosure* closure = makeClosure(code,num_ups);
       for (int u = 0; u < num_ups; u++) {
