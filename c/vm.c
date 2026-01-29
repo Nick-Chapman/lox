@@ -254,6 +254,7 @@ bool is_falsey(Value a) { // just nil/false
 //////////////////////////////////////////////////////////////////////
 // Select sharing semantics...
 
+// Enabling this no longer works!
 //#define NO_SHARING // Enable for 3x speedup on ../examples/bench1.lox
 
 #ifdef NO_SHARING

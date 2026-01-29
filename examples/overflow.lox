@@ -1,0 +1,23 @@
+
+fun empty(e,c) { return e(); }
+
+fun cons(x,xs) {
+  fun k(e,c) { return c(x,xs); }
+  return k;
+}
+
+fun upto (a,b) {
+  if (a > b) return empty;
+  return cons(a, upto(a+1,b));
+}
+
+fun print_list(xs) {
+  fun e() { print "end"; }
+  fun c(x,xs) { print x; print_list(xs); }
+  xs(e,c);
+}
+
+var sam = upto (1,20); // X lox -- seg fault (8 is ok) -- stack overflow?: assert!. fix!
+
+print "sam:";
+print_list(sam);

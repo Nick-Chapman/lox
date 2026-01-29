@@ -1,0 +1,66 @@
+// Compute Pythagorean Triples...
+
+var start = clock();
+
+// Scott encoding for lists:
+
+fun empty(e,c) { return e(); }
+
+fun cons(x,xs) {
+  fun k(e,c) { return c(x,xs); }
+  return k;
+}
+
+fun singleton(x) {
+  return cons(x,empty);
+}
+
+fun append (xs,ys) {
+  fun e() { return ys; }
+  fun c(x,xs) { return cons(x,append(xs,ys)); }
+  return xs(e,c);
+}
+
+fun bind (xs,f) {
+  fun e() { return empty; }
+  fun c(x,xs) { return append (f(x), bind(xs,f)); }
+  return xs(e,c);
+}
+
+fun upto (a,b) {
+  if (a > b) return empty;
+  return cons(a, upto(a+1,b));
+}
+
+fun print_list(xs) {
+  fun e() { print "end"; }
+  fun c(x,xs) { print x; print_list(xs); }
+  xs(e,c);
+}
+
+fun sqr(a) { return a*a; }
+
+fun pythagorean_triples(n) {
+  fun f(x) {
+    fun g(y) {
+      fun h(z) {
+        if (sqr(x) + sqr(y) == sqr(z)) {
+          return singleton(10000*x + 100*y + z);
+        } else {
+          return empty;
+        }
+      }
+      return bind(upto(y,n),h);
+    }
+    return bind(upto(x,n),g);
+  }
+  return bind(upto(1,n),f);
+}
+
+var max = 19; // jlox,clox,tlox -- all good
+//var max = 17; // clox -- stack overflow
+
+// hlox: (stderr) lox.exe: relativize: too big
+
+print_list(pythagorean_triples(max));
+print clock() - start;

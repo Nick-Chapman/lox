@@ -1,0 +1,10 @@
+
+example:
+  echo -n ~/code/lox/examples/pythagorean_triples.lox > $out
+
+*bench1: example @example src/lox.exe c/vm.exe
+  echo "#jlox"; ~/.local/bin/jlox $$(cat example)
+  #echo "#clox"; ~/.local/bin/clox $$(cat example)
+  echo "#(my)tloc"; ./lox.exe -tree $$(cat example)
+  #echo "#(my)hloc"; ./lox.exe -bci $$(cat example)
+  #echo "#(my)loc"; ./lox.exe $$(cat example) -export code.bin && ./vm.exe code.bin
