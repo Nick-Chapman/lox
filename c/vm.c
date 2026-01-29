@@ -335,36 +335,56 @@ typedef struct {
 } CallFrame;
 
 //////////////////////////////////////////////////////////////////////
+// VM state (except for ip)
+
+#define STACK_SIZE 2000
+#define CALLSTACK_SIZE 100
+
+typedef struct {
+  // value stack:
+  Value stack[STACK_SIZE];
+  Value* base;
+  Value* sp;
+  Value* stack_top;
+  // call-frame stack
+  CallFrame frames[CALLSTACK_SIZE];
+  int frame_depth;
+  // up-values for current function
+  Value* ups;
+} VM;
+
+void init_vm(VM* vm) {
+  vm->base = vm->stack;
+  vm->sp = vm->stack;
+  vm->stack_top = & vm->stack[STACK_SIZE];
+  vm->frame_depth = 0;
+  vm->ups = NULL;
+}
+
+Value pop(VM* vm) {
+  if (vm->sp <= vm->stack) runtime_error(0,"stack underfow");
+  return (*--vm->sp);
+}
+
+void push(VM* vm, Value value) {
+  if (vm->sp >= vm->stack_top) runtime_error(0,"stack overflow");
+  *vm->sp++ = value;
+}
+
+//////////////////////////////////////////////////////////////////////
 // run_code()
 
-void run_code(Code code) {
+void run_code(Code code,VM* vm) {
 
-  // TODO: move VM state into a struct
-
-  int stack_size = 100; //TODO: check overflow
-  Value stack[stack_size];
-  Value* base = stack;
-  Value* sp = stack; //stack depth
-
-  CallFrame frames[100]; //TODO: check overflow
-  int frame_depth = 0;
-
-  Value* ups = 0;
-
-#define PUSH(d) (*sp++ = (d))
-#define POP (*--sp)
-#define TOP (sp[-1])
-
-#define printableOffset 0 // must match Code.hs
-
-#define ARG ((*ip++) - printableOffset)
+# define ARG (*ip++)
+# define PUSH(d) (push(vm,d))
+# define POP (pop(vm))
+# define TOP (vm->sp[-1])
 
   u8* ip = code.ip_start;
   int step = 0;
 
   for (;;step++) {
-
-    //if (ip == code.ip_end) return; // Halt (replaced by OP_RETURN)
 
     //print_stack(stack,sp);
     //printf("%d (%ld) %02x '%c'\n",step,ip-code.ip_start,*ip,*ip); fflush(stdout);
@@ -404,18 +424,18 @@ void run_code(Code code) {
       break;
     }
     case OP_POP: {
-      --sp;
+      POP;
       break;
     }
     case OP_GET_LOCAL: {
       u8 arg = ARG;
-      Value value = base[arg];
+      Value value = vm->base[arg];
       PUSH(value);
       break;
     }
     case OP_GET_UPVALUE: {
       u8 arg = ARG;
-      Value value = ups[arg];
+      Value value = vm->ups[arg];
       PUSH(value);
       break;
     }
@@ -515,15 +535,16 @@ void run_code(Code code) {
     case OP_CALL: {
       u8 pos = ARG;
       u8 num_actuals = ARG;
-      Value callee = *deref(sp[-1-num_actuals]);
+      Value callee = *deref(vm->sp[-1-num_actuals]);
       if (!IsClosure(callee)) {
         runtime_error(1,"Can only call functions and classes.");
       }
       ObjClosure* closure = AsClosure(callee);
-      CallFrame cf = { .ip = ip, .base = base, .ups = ups };
-      frames[frame_depth++] = cf;
-      base = sp - num_actuals - 1;
-      ups = closure->ups;
+      if (vm->frame_depth >= CALLSTACK_SIZE) runtime_error(0,"callstack overflow");
+      CallFrame cf = { .ip = ip, .base = vm->base, .ups = vm->ups };
+      vm->frames[vm->frame_depth++] = cf;
+      vm->base = vm->sp - num_actuals - 1;
+      vm->ups = closure->ups;
       ip = closure->code;
       u8 arity = ARG;
       if (num_actuals != arity) {
@@ -543,12 +564,12 @@ void run_code(Code code) {
         u8 arg = ARG;
         switch (mode) {
         case 1: {
-          Value value = base[arg];
+          Value value = vm->base[arg];
           closure->ups[u] = value;
           break;
         }
         case 2: {
-          Value value = ups[arg];
+          Value value = vm->ups[arg];
           closure->ups[u] = value;
           break;
         }
@@ -561,12 +582,12 @@ void run_code(Code code) {
     }
     case OP_RETURN: {
       Value value = POP;
-      if (frame_depth == 0) return; //Halt
-      CallFrame cf = frames[--frame_depth];
-      sp = base;
+      if (vm->frame_depth == 0) return; //Halt
+      CallFrame cf = vm->frames[--vm->frame_depth];
+      vm->sp = vm->base;
       ip = cf.ip;
-      base = cf.base;
-      ups = cf.ups;
+      vm->base = cf.base;
+      vm->ups = cf.ups;
       PUSH(value);
       break;
     }
@@ -620,6 +641,9 @@ int main(int argc, char* argv[]) {
   char* contents = read_file(lox_file,&lox_file_size);
 
   Code code = decode(contents,lox_file_size);
-  run_code(code);
+
+  VM vm;
+  init_vm(&vm);
+  run_code(code,&vm);
   //printf("done!\n");
 }
