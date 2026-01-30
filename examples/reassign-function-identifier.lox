@@ -1,0 +1,18 @@
+
+// Explore the lox semantics for assignment to function identifiers
+
+{
+
+  fun g() {
+    print "G";
+  }
+
+  fun f() {
+    print "F";
+    f = g;
+  }
+
+  f();
+  f();
+
+}

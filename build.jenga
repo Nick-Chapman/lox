@@ -1,10 +1,11 @@
 
 example:
-  echo -n ~/code/lox/examples/pythagorean_triples.lox > $out
+  #echo -n ~/code/lox/examples/pythagorean_triples.lox > $out
+  echo -n ~/code/lox/examples/reassign-function-identifier.lox > $out
 
-*bench1: example @example src/lox.exe c/vm.exe
-  echo "#jlox"; ~/.local/bin/jlox $$(cat example)
-  #echo "#clox"; ~/.local/bin/clox $$(cat example)
-  #echo "#(my)tloc"; ./lox.exe -tree $$(cat example)
-  #echo "#(my)hloc"; ./lox.exe -bci $$(cat example)
-  echo "#(my)xloc"; ./lox.exe $$(cat example) -export code.bin && ./vm.exe code.bin
+*five-ways: example @example src/lox.exe c/vm.exe
+  echo "#J"; ~/.local/bin/jlox $$(cat example)
+  echo "#C"; ~/.local/bin/clox $$(cat example)
+  echo "#T"; ./lox.exe -tree $$(cat example)
+  echo "#H"; ./lox.exe -bci $$(cat example)
+  echo "#T"; ./lox.exe $$(cat example) -export code.bin && ./vm.exe code.bin
