@@ -7,22 +7,28 @@ fun fib(n) {
  }
 }
 
-var max = 30;
-
-// Crafting reference...
-// jlox: 1.43s
-// clox: 0.13
-
-// My versions...
-// T: tlox: 3.2s
-// H: hlox: VERY SLOW (Haskell VM.hs)
-// C: lox:  0.37 (correct sharing semantics)
-// C: lox:  0.14 (NO_SHARING - see ../c/vm.c)
-
 var start = clock();
+
 var i = 0;
+var max = 30;
+var sum = 0;
+
 while (i <= max) {
-  print fib(i);
+  var res = fib(i);
+  //print res;
+  sum = sum + res;
   i = 1+i;
 }
+
+if (sum != 2178308) {
+  print "unexpected result";
+  print sum;
+}
+
 print clock() - start;
+
+// $ run-bench1.sh
+// J: 1.5499999523162842
+// T: 3.298144991
+// C: 0.13775
+// X: 0.426783
