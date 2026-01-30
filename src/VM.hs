@@ -134,10 +134,12 @@ dispatch pos = \case
       collectUpValue = do
         mode <- FetchArg
         i <- FetchArg
-        case mode of
+        r <- case mode of
           1 -> GetSlot i
           2 -> GetUpValue i
           _ -> error "collectUpValue/mode"
+        v <- Effect (ReadRef r)
+        Effect (NewRef v)
 
     upValues <- sequence $ replicate numUpvalues collectUpValue
     Push $ VFunc FuncDef{ codePointer, upValues }
