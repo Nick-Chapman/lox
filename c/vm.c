@@ -66,29 +66,16 @@ typedef enum {
   TIndirection,
 } Typ;
 
-typedef struct value {
+typedef struct Value {
   Typ typ;
   union {
     double number;
     bool boolean;
     struct ObjString* string;
     struct ObjClosure* closure;
-    struct ObjIndirection* indirection;
+    struct Value* indirection;;
   } as;
 } Value;
-
-//////////////////////////////////////////////////////////////////////
-// ObjIndirection
-
-typedef struct ObjIndirection {
-  Value value;
-} ObjIndirection;
-
-ObjIndirection* makeIndirection(Value value) {
-  ObjIndirection* indirection = malloc(sizeof(ObjIndirection)); // TODO: leak
-  indirection->value = value;
-  return indirection;
-}
 
 //////////////////////////////////////////////////////////////////////
 // ObjClosure
@@ -135,7 +122,7 @@ ObjString* concatString(ObjString* str1, ObjString* str2) {
 //////////////////////////////////////////////////////////////////////
 // Value construction
 
-Value ValueNil = { .typ = TNil, .as = { .number = 999 } }; //never look at number;
+Value ValueNil = { .typ = TNil, .as = { .number = 999 } }; // we never look at number;
 
 Value ValueOfDouble(double number) {
   return (Value) { .typ = TDouble, .as = { .number = number } };
@@ -149,7 +136,7 @@ Value ValueOfString(struct ObjString* string) {
 Value ValueOfClosure(struct ObjClosure* closure) {
   return (Value) { .typ = TClosure, .as = { .closure = closure } };
 }
-Value ValueOfIndirection(struct ObjIndirection* indirection) {
+Value ValueOfIndirection(struct Value* indirection) {
   return (Value) { .typ = TIndirection, .as = { .indirection = indirection } };
 }
 
@@ -194,9 +181,18 @@ struct ObjClosure* AsClosure(Value v) {
   assert(IsClosure(v));
   return v.as.closure;
 }
-struct ObjIndirection* AsIndirection(Value v) {
+struct Value* AsIndirection(Value v) {
   assert(IsIndirection(v));
   return v.as.indirection;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Indirection
+
+Value* makeIndirection(Value value) {
+  struct Value* pointer = malloc(sizeof(Value)); // TODO: leak
+  *pointer = value;
+  return pointer;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -219,7 +215,7 @@ void print_value(Value v) {
     printf("%.*s",len-1,name);
   } else if (IsIndirection(v)) {
     printf("&");
-    print_value(AsIndirection(v)->value);
+    print_value(*(AsIndirection(v)));
   } else {
     printf("<unknown-value-type>");
   }
@@ -250,22 +246,6 @@ bool is_falsey(Value a) { // just nil/false
   }
   return false;
 }
-
-//////////////////////////////////////////////////////////////////////
-// Select sharing semantics...
-
-// Enabling this no longer works!
-//#define NO_SHARING // Enable for 3x speedup on ../examples/bench1.lox
-
-#ifdef NO_SHARING
-// DONT respect sharing semantics...
-#define indirect(v) (v)
-#define deref(v) (&v)
-#else
-// Respect sharing semantics...
-#define indirect(v) (ValueOfIndirection(makeIndirection(v)))
-#define deref(v) (&AsIndirection(v)->value)
-#endif
 
 //////////////////////////////////////////////////////////////////////
 // Decode static program text: constants and bytecode
@@ -431,32 +411,34 @@ void run_code(Code code,VM* vm) {
     }
     case OP_GET_LOCAL: {
       u8 arg = ARG;
-      Value value = vm->base[arg];
+      Value* ind = &vm->base[arg];
+      Value value = ValueOfIndirection(ind);
       PUSH(value);
       break;
     }
     case OP_GET_UPVALUE: {
       u8 arg = ARG;
-      Value value = vm->ups[arg];
+      Value* ind = &vm->ups[arg];
+      Value value = ValueOfIndirection(ind);
       PUSH(value);
       break;
     }
-
     case OP_INDIRECT: {
       Value v1 = TOP;
-      Value value = indirect(v1);
+      Value* ind = makeIndirection(v1);
+      Value value = ValueOfIndirection(ind);
       TOP = value;
       break;
     }
     case OP_DEREF: {
-      Value value = *deref(TOP);
+      Value value = *AsIndirection(TOP);
       TOP = value;
       break;
     }
     case OP_ASSIGN: {
       Value target = POP;
       Value value = TOP; //peek
-      *deref(target) = value;
+      *AsIndirection(target) = value;
       break;
     }
 
@@ -537,7 +519,7 @@ void run_code(Code code,VM* vm) {
     case OP_CALL: {
       u8 pos = ARG;
       u8 num_actuals = ARG;
-      Value callee = *deref(vm->sp[-1-num_actuals]);
+      Value callee = *AsIndirection(vm->sp[-1-num_actuals]);
       if (!IsClosure(callee)) {
         runtime_error(1,"Can only call functions and classes.");
       }
