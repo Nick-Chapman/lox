@@ -2,7 +2,7 @@ module Compiler (compile) where
 
 import Ast (Stat(..),Exp(..),Op1(..),Op2(..),Lit(..),Identifier(..),Func(..))
 import Code (Code(..))
-import Control.Monad (ap,liftM)
+import Control.Monad (ap,liftM,when)
 import Control.Monad.Fix (MonadFix,mfix)
 import Data.ByteString.Internal (c2w)
 import Data.List (sortBy)
@@ -15,6 +15,9 @@ import OP (Op)
 import OP qualified
 import Pos (Pos,initPos)
 import Text.Printf (printf)
+
+sharing :: Bool -- control extra indirection needed for sharing semantics
+sharing = True
 
 compile :: [Stat] -> Either (Pos,String) Code
 compile decls = do
@@ -41,7 +44,7 @@ nativeClock env k = mdo
   newline
 
   after <- Here
-  Emit OP.INDIRECT
+  when (sharing) $ Emit OP.INDIRECT
   k (insertEnv "clock" env)
 
 compStats :: Env -> [Stat] -> Asm ()
@@ -103,7 +106,7 @@ compStatThen env = \case
 
   SVarDecl x e -> \k -> do
     compExp e
-    Emit OP.INDIRECT
+    when (sharing) $ Emit OP.INDIRECT
     k (insertEnv' x env)
     Emit OP.POP
 
@@ -133,7 +136,7 @@ compStatThen env = \case
     newline
 
     after <- Here
-    Emit OP.INDIRECT
+    when (sharing) $ Emit OP.INDIRECT
     k (insertEnv' fname env)
     Emit OP.POP
 
@@ -194,12 +197,12 @@ compStatThen env = \case
           VLocal n -> do
             Emit OP.GET_LOCAL
             Emit (OP.ARG n)
-            Emit OP.DEREF
+            when (sharing) $ Emit OP.DEREF
             Emit OP.DEREF
           VFrame n -> do
             Emit OP.GET_UPVALUE
             Emit (OP.ARG n)
-            Emit OP.DEREF
+            when (sharing) $ Emit OP.DEREF
             Emit OP.DEREF
 
       EAssign Identifier{pos,name} e -> do
@@ -208,12 +211,12 @@ compStatThen env = \case
           VLocal n -> do
             Emit OP.GET_LOCAL
             Emit (OP.ARG n)
-            Emit OP.DEREF
+            when (sharing) $ Emit OP.DEREF
             Emit OP.ASSIGN
           VFrame n -> do
             Emit OP.GET_UPVALUE
             Emit (OP.ARG n)
-            Emit OP.DEREF
+            when (sharing) $ Emit OP.DEREF
             Emit OP.ASSIGN
 
       ELogicalAnd e1 e2 -> mdo
@@ -236,8 +239,10 @@ compStatThen env = \case
 
       ECall pos func args -> do
         compExp func
-        Emit OP.INDIRECT
-        sequence_ [ do compExp arg; Emit OP.INDIRECT | arg <- args ]
+        Emit OP.INDIRECT -- confused how this interacts with sharing
+        sequence_ [ do compExp arg
+                       when (sharing) $ Emit OP.INDIRECT
+                  | arg <- args ]
         Position pos $ Emit OP.CALL
         Emit (OP.ARG pos)
         Emit (OP.ARG (length args))

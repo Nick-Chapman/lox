@@ -520,6 +520,7 @@ void run_code(Code code,VM* vm) {
       u8 pos = ARG;
       u8 num_actuals = ARG;
       Value callee = *AsIndirection(vm->sp[-1-num_actuals]);
+      //Value callee = vm->sp[-1-num_actuals];
       if (!IsClosure(callee)) {
         runtime_error(1,"Can only call functions and classes.");
       }

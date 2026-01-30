@@ -56,11 +56,11 @@ dispatch pos = \case
     r <- Effect (NewRef v)
     Push (VIndirection r)
   OP.DEREF -> do
-    r <- deref <$> Pop
+    r <- asIndirection <$> Pop
     v <- Effect (ReadRef r)
     Push v
   OP.ASSIGN -> do
-    r <- deref <$> Pop
+    r <- asIndirection <$> Pop
     v <- Peek
     Effect (WriteRef r v)
 
@@ -104,8 +104,9 @@ dispatch pos = \case
   OP.CALL -> do
     pos <- FetchArg
     nActuals <- FetchArg
-    r <- deref <$> PeekSlot (1+nActuals)
-    Effect (ReadRef r) >>= \case
+    v0 <- PeekSlot (1+nActuals)
+    v <- Effect (ReadRef (asIndirection v0))
+    case v of
       VFunc FuncDef{codePointer,upValues} -> do
         prevIP <- GetIP
         prevBase <- GetBase
@@ -358,8 +359,8 @@ data State = State
 state0 :: State
 state0 = State { ip = 0, items = [], base = 0, ups = [], callStack = [] }
 
-deref :: Value -> Ref Value
-deref = \case VIndirection r -> r; _ -> error "deref"
+asIndirection :: Value -> Ref Value
+asIndirection = \case VIndirection r -> r; _ -> error "asIndirection"
 
 data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Ref Value] }
 
