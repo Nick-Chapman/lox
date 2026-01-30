@@ -44,13 +44,11 @@ dispatch pos = \case
     pure ()
   OP.GET_LOCAL -> do
     i <- FetchArg
-    v <- GetSlot i
-    r <- Effect (NewRef v)
+    r <- GetSlot i
     Push (VIndirection r)
   OP.GET_UPVALUE -> do
     i <- FetchArg
-    v <- GetUpValue i
-    r <- Effect (NewRef v)
+    r <- GetUpValue i
     Push (VIndirection r)
 
   OP.INDIRECT -> do
@@ -127,7 +125,7 @@ dispatch pos = \case
     dist <- fetchShort
     codePointer <- (+ dist) <$> GetIP
     let
-      collectUpValue :: VM Value
+      collectUpValue :: VM (Ref Value)
       collectUpValue = do
         mode <- FetchArg
         i <- FetchArg
@@ -208,8 +206,11 @@ data VM a where
   Push :: Value -> VM ()
   Pop :: VM Value
 
+  PushRef :: Ref Value -> VM ()
+  PopRef :: VM (Ref Value)
+
   PeekSlot :: Int -> VM Value
-  GetSlot :: Int -> VM Value
+  GetSlot :: Int -> VM (Ref Value)
 
   GetConstNum :: Int -> VM Value
   GetConstStr :: Int -> VM Value
@@ -228,10 +229,10 @@ data VM a where
   PushCallFrame :: CallFrame -> VM ()
   PopCallFrame :: VM CallFrame
 
-  GetUps :: VM [Value]
-  SetUps :: [Value] -> VM ()
+  GetUps :: VM [Ref Value]
+  SetUps :: [Ref Value] -> VM ()
 
-  GetUpValue :: Int -> VM Value
+  GetUpValue :: Int -> VM (Ref Value)
 
 
 runVM :: Code -> VM () -> Eff ()
@@ -248,25 +249,29 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       -- Push/Pop/Peek are w.r.t the (sp) depth
       Peek -> loop s (do v <- Pop; Push v; return v)
 
-      Push v -> \k -> do
-        let State{items} = s
-        k () s { items = v : items }
+      Push v -> loop s (do r <- Effect (NewRef v); PushRef r)
+      Pop -> loop s (do r <- PopRef; Effect (ReadRef r))
 
-      Pop -> \k -> do
+      PushRef r -> \k -> do
         let State{items} = s
-        let lr = items !! 0
-        k lr s { items = drop 1 items }
+        k () s { items = r : items }
+
+      PopRef -> \k -> do
+        let State{items} = s
+        let r = items !! 0
+        k r s { items = drop 1 items }
 
       PeekSlot n -> \k -> do
         let State{items} = s
-        let v = items !! (n-1)
+        let r = items !! (n-1)
+        v <- ReadRef r
         k v s
 
       -- Get/Set are wrt to the base
       GetSlot arg -> \k -> do
         let State{base,items} = s
-        let v = reverse items !! (base + arg)
-        k v s
+        let r = reverse items !! (base + arg)
+        k r s
 
       GetConstNum arg -> \k -> do
         let i = arg
@@ -344,9 +349,9 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
 
 data State = State
   { ip :: Int
-  , items :: [Value]
+  , items :: [Ref Value]
   , base :: Int
-  , ups :: [Value]
+  , ups :: [Ref Value]
   , callStack :: [CallFrame]
   }
 
@@ -356,7 +361,7 @@ state0 = State { ip = 0, items = [], base = 0, ups = [], callStack = [] }
 deref :: Value -> Ref Value
 deref = \case VIndirection r -> r; _ -> error "deref"
 
-data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Value] }
+data CallFrame = CallFrame { prevIP :: Int, prevBase :: Int, prevUps :: [Ref Value] }
 
 ----------------------------------------------------------------------
 -- copy and paste of primitive values and operations; add VCodePointer
@@ -368,7 +373,7 @@ data Value
   | VFunc FuncDef
   | VIndirection (Ref Value)
 
-data FuncDef = FuncDef  { codePointer :: Int, upValues :: [Value] }
+data FuncDef = FuncDef  { codePointer :: Int, upValues :: [Ref Value] }
 
 isTruthy :: Value -> Bool
 isTruthy = \case
