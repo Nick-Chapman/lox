@@ -6,7 +6,7 @@ import Data.ByteString.Internal (w2c)
 import Data.List (isSuffixOf)
 import OP (Op)
 import OP qualified
-import Pos (Pos)
+import Pos (Pos,initPos)
 import Runtime (Ref,Eff(Clock,Print,Error,NewRef,ReadRef,WriteRef))
 import Text.Printf (printf)
 
@@ -19,7 +19,8 @@ fetchDispatchLoop _i = do
   _ip <- GetIP
   Fetch >>= \case
     Nothing -> pure () -- Halt
-    Just (pos,op) -> do
+    Just op -> do
+      let pos = initPos -- hack/bug. but no tests provoke yet
       --DebugStack
       --Effect (Runtime.Print (show (_ip,op)))
       dispatch pos op
@@ -68,16 +69,16 @@ dispatch pos = \case
     v2 <- Pop
     v1 <- Pop
     Push (VBool (vequal v1 v2))
-  OP.GREATER -> execBinary VBool (>)
-  OP.LESS -> execBinary VBool (<)
+  OP.GREATER -> execBinary pos VBool (>)
+  OP.LESS -> execBinary pos VBool (<)
   OP.ADD -> do
     v2 <- Pop
     v1 <- Pop
     v <- Effect (vadd pos (v1,v2))
     Push v
-  OP.SUBTRACT -> execBinary VNumber (-)
-  OP.MULTIPLY -> execBinary VNumber (*)
-  OP.DIVIDE -> execBinary VNumber (/)
+  OP.SUBTRACT -> execBinary pos VNumber (-)
+  OP.MULTIPLY -> execBinary pos VNumber (*)
+  OP.DIVIDE -> execBinary pos VNumber (/)
   OP.NOT -> do
     v <- Pop
     Push (VBool (not (isTruthy v)))
@@ -117,7 +118,7 @@ dispatch pos = \case
         SetUps upValues
         SetIP codePointer
         nFormals <- FetchArg
-        Effect (checkArity nFormals nActuals)
+        Effect (checkArity pos nFormals nActuals)
       _v -> do
         Effect (Runtime.Error pos "Can only call functions and classes.")
 
@@ -155,19 +156,18 @@ dispatch pos = \case
   OP.ARG{} ->
     error "dispatch/OP_ARG"
 
-  where
 
-  checkArity :: Int -> Int -> Eff ()
-  checkArity nformals nargs =
-    if nformals == nargs then pure () else
-      Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
+execBinary :: Pos -> (a -> Value) -> (Double -> Double -> a) -> VM ()
+execBinary pos mk f = do
+  v2 <- Pop
+  v1 <- Pop
+  n <- Effect (binary pos f v1 v2)
+  Push (mk n)
 
-  execBinary :: (a -> Value) -> (Double -> Double -> a) -> VM ()
-  execBinary mk f = do
-    v2 <- Pop
-    v1 <- Pop
-    n <- Effect (binary pos f v1 v2)
-    Push (mk n)
+checkArity :: Pos -> Int -> Int -> Eff ()
+checkArity pos nformals nargs =
+  if nformals == nargs then pure () else
+    Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
 
 fetchShort :: VM Int
 fetchShort = do
@@ -215,7 +215,7 @@ data VM a where
 
   GetConstNum :: Int -> VM Value
   GetConstStr :: Int -> VM Value
-  Fetch :: VM (Maybe (Pos,Op))
+  Fetch :: VM (Maybe Op)
   FetchArg :: VM Int
   FetchByte :: Int -> VM Int
 
@@ -290,17 +290,17 @@ runVM Code{numbers,strings,chunk} m = loop state0 m kFinal
       Fetch -> \k -> do
         let State{ip} = s
         if ip >= progSize then k Nothing s else do
-          let posAndOp = chunk !! ip
-          k (Just posAndOp) s { ip = ip + 1 }
+          let op = chunk !! ip
+          k (Just op) s { ip = ip + 1 }
       FetchArg -> \k -> do
         let State{ip} = s
         case chunk !! ip of
-          (_,OP.ARG i) -> k i s { ip = ip + 1 }
+          OP.ARG i -> k i s { ip = ip + 1 }
           _ -> error "FetchArg"
 
       FetchByte p -> \k -> do
         case chunk !! p of
-          (_,OP.ARG i) -> k i s
+          OP.ARG i -> k i s
           _ -> error "FetchByte"
 
       ModIP g -> \k -> do

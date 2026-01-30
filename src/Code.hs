@@ -6,7 +6,6 @@ import Data.Word (Word8,Word16,Word64)
 import GHC.Float (castDoubleToWord64)
 import OP (Op)
 import OP qualified (encode)
-import Pos (Pos)
 
 export :: Code -> String
 export = map w2c . encode
@@ -14,7 +13,7 @@ export = map w2c . encode
 data Code = Code
   { numbers :: [Double]
   , strings :: [String]
-  , chunk :: [(Pos,Op)]
+  , chunk :: [Op]
   } deriving Show
 
 encode :: Code -> [Word8]
@@ -25,7 +24,7 @@ encode Code{numbers,strings,chunk=ops} =
   concat [ encodeDouble n | n <- numbers ] ++
   concat [ encodeWord16 (shortLength "string too long" (length s)) | s <- strings ] ++
   concat [ map c2w (s ++ ['\0']) | s <- strings ] ++
-  [ OP.encode op | (_pos_USEME,op) <- ops ]
+  [ OP.encode op | op <- ops ]
 
 byteLength :: String -> Int -> Word8
 byteLength tag n = if n >= 256 then error tag else fromIntegral n

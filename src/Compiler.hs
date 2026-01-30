@@ -171,16 +171,16 @@ compStatThen env = \case
           Emit OP.STRING
           Emit (OP.ARG i)
 
-      EUnary pos op e  -> do
+      EUnary _pos op e  -> do
         compExp e
-        Position pos $ case op of
+        case op of
           Negate -> Emit OP.NEGATE
           Not -> Emit OP.NOT
 
-      EBinary pos e1 op e2 -> do
+      EBinary _pos e1 op e2 -> do
         compExp e1
         compExp e2
-        Position pos $ case op of
+        case op of
           Add -> Emit OP.ADD
           Sub -> Emit OP.SUBTRACT
           Mul -> Emit OP.MULTIPLY
@@ -243,7 +243,7 @@ compStatThen env = \case
         sequence_ [ do compExp arg
                        when (sharing) $ Emit OP.INDIRECT
                   | arg <- args ]
-        Position pos $ Emit OP.CALL
+        Emit OP.CALL
         Emit (OP.ARG pos)
         Emit (OP.ARG (length args))
 
@@ -392,9 +392,9 @@ type Res = Either (Pos,String) Code
 type Err = (Pos,String)
 
 runAsm :: Asm () -> Res
-runAsm m = finish (loop initPos emptyTabN emptyTabS 0 m)
+runAsm m = finish (loop emptyTabN emptyTabS 0 m)
   where
-    finish :: ((),TabN,TabS,[(Pos,Op)],[Err]) -> Res
+    finish :: ((),TabN,TabS,[Op],[Err]) -> Res
     finish ((),tn,ts,chunk,errs) =
       case errs of
         [] -> Right $ Code { numbers = listTabN tn
@@ -402,17 +402,17 @@ runAsm m = finish (loop initPos emptyTabN emptyTabS 0 m)
                            , chunk }
         err:_ -> Left err
 
-    loop :: Pos -> TabN -> TabS -> Int -> Asm a -> (a,TabN,TabS,[(Pos,Op)],[Err])
-    loop pos tn ts q = \case
+    loop :: TabN -> TabS -> Int -> Asm a -> (a,TabN,TabS,[Op],[Err])
+    loop tn ts q = \case
       Ret a -> (a,tn,ts,[],[])
       Bind m f ->
-        case loop pos tn ts q m of
+        case loop tn ts q m of
           (a,tn,ts,ops1,errs1) ->
-            case loop pos tn ts (q + length ops1) (f a) of
+            case loop tn ts (q + length ops1) (f a) of
               (b,tn,ts,ops2,errs2) ->
                 (b,tn,ts,ops1++ops2,errs1++errs2)
-      Position pos' m -> loop pos' tn ts q m
-      Emit op -> ((),tn,ts,[(pos,op)],[])
+      Position _pos' m -> loop tn ts q m
+      Emit op -> ((),tn,ts,[op],[])
       EmitConstNum n -> do
         let (tn',i) = insertTabN n tn
         (i,tn',ts,[],[])
@@ -422,7 +422,7 @@ runAsm m = finish (loop initPos emptyTabN emptyTabS 0 m)
       Error pos mes -> ((),tn,ts,[],[(pos,mes)])
       Here -> (q,tn,ts,[],[])
       Fix f -> do
-        let x@(a,_,_,_,_) = loop pos tn ts q (f a)
+        let x@(a,_,_,_,_) = loop tn ts q (f a)
         x
 
 data TabN = TabN { i :: Int , m :: Map Double Int }
