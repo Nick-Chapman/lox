@@ -23,6 +23,7 @@ fullpath.list: @chapters
   echo /home/nic/code/lox/examples/fib-iter.lox >> $out
   echo /home/nic/code/lox/examples/thrice.lox >> $out
   echo /home/nic/code/lox/examples/pythagorean_triples.lox >> $out
+  #echo /home/nic/code/lox/examples/reassign-function-identifier.lox >> $out
 
 # T: Tree walk interpreter.
 # H: Bytecode compiler + haskell VM.

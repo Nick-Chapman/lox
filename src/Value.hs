@@ -37,7 +37,7 @@ data BoundMethod = BoundMethod { identity :: Ref ()
                                , closure :: Closure }
 
 data Closure = Closure { name :: String
-                       , func :: {-self-}Value -> {-globals-}Env -> Pos -> [Value] -> Eff Value }
+                       , func :: {-globals-}Env -> Pos -> [Value] -> Eff Value }
 
 instance Show Value where
   show = \case

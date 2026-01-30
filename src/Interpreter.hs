@@ -66,7 +66,8 @@ execStat globals ret = execute where
       r <- evaluate globals env e >>= NewRef
       k (insertEnv env name r)
     SFunDecl function@Func{name=Identifier{name}} -> \k -> do
-      r <- NewRef (closeFunction pure env function)
+      r <- NewRef undefined
+      WriteRef r (closeFunction r pure env function)
       k (insertEnv env name r)
     SClassDecl Identifier{name=className} optSuperX methods -> \k -> do
       classIdentity <- NewRef ()
@@ -82,12 +83,11 @@ execStat globals ret = execute where
       classR <- NewRef (VClass ClassValue { classIdentity, className, optSuper, methodMap })
       k (insertEnv env className classR)
 
-closeFunction :: (Value -> Eff Value) -> Env -> Func -> Value
-closeFunction ret env Func{name=Identifier{name=fname},formals,statements} = do
-  VFunc $ Closure fname $ \self globals pos args -> do
+closeFunction :: Ref Value -> (Value -> Eff Value) -> Env -> Func -> Value
+closeFunction selfR ret env Func{name=Identifier{name=fname},formals,statements} = do
+  VFunc $ Closure fname $ \globals pos args -> do
     checkArity pos (length formals) (length args)
     Runtime.WithFunctionCall pos (fname++"()") $ do
-      selfR <- NewRef self
       env <- pure $ insertEnv env fname selfR
       env <- bindArgs env (zip formals args)
       let k _ = ret VNil
@@ -107,7 +107,7 @@ closeMethod className optSuper env Func{name=Identifier{name=fname},formals,stat
         pure $ insertEnv env "super" superR
     identity <- NewRef ()
     -- methods are not directly self recursive; must go via "this"
-    pure $ BoundMethod identity $ Closure fname $ \_self globals pos args -> do
+    pure $ BoundMethod identity $ Closure fname $ \globals pos args -> do
       checkArity pos (length formals) (length args)
       Runtime.WithFunctionCall pos (fname++"()") $ do
         env <- bindArgs env (zip formals args)
@@ -274,7 +274,7 @@ asFunction func globals pos args = case func of
     Runtime.Error pos "Can only call functions and classes."
 
 runClosure :: Closure -> Env -> Pos -> [Value] -> Eff Value
-runClosure self@Closure{func} = func (VFunc self) -- tie recursive knot!
+runClosure Closure{func} = func
 
 checkArity :: Pos -> Int -> Int -> Eff ()
 checkArity pos nformals nargs =
