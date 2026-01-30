@@ -45,7 +45,8 @@ typedef enum {
   OP_JUMP_IF_FALSE      = 'B', // branch forwards
   OP_LOOP               = 'L', // jump backwards
 
-  OP_CALL               = 'C',
+  OP_SETUP_CALL         = 'D',
+  OP_ENTER              = 'E',
   OP_CLOSURE            = 'F',
   OP_RETURN             = 'R',
 
@@ -516,11 +517,16 @@ void run_code(Code code,VM* vm) {
       ip -= dist;
       break;
     }
-    case OP_CALL: {
+    case OP_SETUP_CALL: {
+      u8 num_actuals = ARG;
+      Value callee = vm->sp[-1-num_actuals];
+      PUSH(callee);
+      break;
+    }
+    case OP_ENTER: {
       u8 pos = ARG;
       u8 num_actuals = ARG;
-      Value callee = *AsIndirection(vm->sp[-1-num_actuals]);
-      //Value callee = vm->sp[-1-num_actuals];
+      Value callee = POP;
       if (!IsClosure(callee)) {
         runtime_error(1,"Can only call functions and classes.");
       }

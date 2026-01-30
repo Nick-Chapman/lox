@@ -54,6 +54,7 @@ argsDescs = \case
   OP.GET_UPVALUE -> [N]
   OP.JUMP -> [D]
   OP.JUMP_IF_FALSE -> [D]
-  OP.CALL -> [N]
+  OP.SETUP_CALL -> [N]
+  OP.ENTER -> [N,N]
   OP.CLOSURE -> [N,D]
   _op -> [] --error (show _op)

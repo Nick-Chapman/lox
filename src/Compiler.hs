@@ -239,11 +239,14 @@ compStatThen env = \case
 
       ECall pos func args -> do
         compExp func
-        Emit OP.INDIRECT -- confused how this interacts with sharing
+        when (sharing) $ Emit OP.INDIRECT
         sequence_ [ do compExp arg
                        when (sharing) $ Emit OP.INDIRECT
                   | arg <- args ]
-        Emit OP.CALL
+        Emit OP.SETUP_CALL
+        Emit (OP.ARG (length args))
+        when (sharing) $ Emit OP.DEREF
+        Emit OP.ENTER
         Emit (OP.ARG pos)
         Emit (OP.ARG (length args))
 

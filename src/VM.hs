@@ -102,12 +102,15 @@ dispatch pos = \case
     dist <- fetchShort
     ModIP (\x -> x - dist) --bacwards
 
-  OP.CALL -> do
+  OP.SETUP_CALL -> do
+    nActuals <- FetchArg
+    v <- PeekSlot (1+nActuals)
+    Push v
+
+  OP.ENTER -> do
     pos <- FetchArg
     nActuals <- FetchArg
-    v0 <- PeekSlot (1+nActuals)
-    v <- Effect (ReadRef (asIndirection v0))
-    case v of
+    Pop >>= \case
       VFunc FuncDef{codePointer,upValues} -> do
         prevIP <- GetIP
         prevBase <- GetBase

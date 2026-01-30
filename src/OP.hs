@@ -39,7 +39,8 @@ data Op
   | JUMP_IF_FALSE
   | LOOP
 
-  | CALL
+  | SETUP_CALL
+  | ENTER
   | CLOSURE
   | RETURN
 
@@ -83,7 +84,8 @@ encode = c2w . \case
   OP.JUMP_IF_FALSE      -> 'B'
   OP.LOOP               -> 'L'
 
-  OP.CALL               -> 'C'
+  OP.SETUP_CALL         -> 'D'
+  OP.ENTER              -> 'E'
   OP.CLOSURE            -> 'F'
   OP.RETURN             -> 'R'
 
