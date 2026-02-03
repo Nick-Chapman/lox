@@ -100,17 +100,13 @@ dispatch pos = \case
     if isTruthy v then pure () else ModIP (+ dist) --forwards
   OP.LOOP -> do
     dist <- fetchShort
-    ModIP (\x -> x - dist) --bacwards
+    ModIP (\x -> x - dist) --backwards
 
-  OP.SETUP_CALL -> do
-    nActuals <- FetchArg
-    v <- PeekSlot (1+nActuals)
-    Push v
-
-  OP.ENTER -> do
+  OP.CALL -> do
     pos <- FetchArg
     nActuals <- FetchArg
-    Pop >>= \case
+    callee <- PeekSlot (1+nActuals)
+    case callee of
       VFunc FuncDef{codePointer,upValues} -> do
         prevIP <- GetIP
         prevBase <- GetBase
