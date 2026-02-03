@@ -6,7 +6,7 @@ import Data.ByteString.Internal (w2c)
 import Data.List (isSuffixOf)
 import OP (Op)
 import OP qualified
-import Pos (Pos,initPos)
+import Pos (Pos,ofLine,initPos)
 import Runtime (Ref,Eff(Clock,Print,Error,NewRef,ReadRef,WriteRef))
 import Text.Printf (printf)
 
@@ -119,7 +119,7 @@ dispatch pos = \case
         nFormals <- FetchArg
         Effect (checkArity pos nFormals nActuals)
       _v -> do
-        Effect (Runtime.Error pos "Can only call functions and classes.")
+        Effect (Runtime.Error (Pos.ofLine pos) "Can only call functions and classes.")
 
   OP.CLOSURE -> makeClosure True
   OP.CLOSURE_noind -> makeClosure False
@@ -172,10 +172,10 @@ execBinary pos mk f = do
   n <- Effect (binary pos f v1 v2)
   Push (mk n)
 
-checkArity :: Pos -> Int -> Int -> Eff ()
-checkArity pos nformals nargs =
+checkArity :: Int -> Int -> Int -> Eff ()
+checkArity line nformals nargs =
   if nformals == nargs then pure () else
-    Runtime.Error pos (printf "Expected %d arguments but got %d." nformals nargs)
+    Runtime.Error (Pos.ofLine line) (printf "Expected %d arguments but got %d." nformals nargs)
 
 fetchShort :: VM Int
 fetchShort = do

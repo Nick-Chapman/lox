@@ -9,6 +9,7 @@ import Data.Text qualified as Text
 import GHC.IO.Encoding (setLocaleEncoding,char8)
 import Interpreter qualified (executeTopDecls)
 import Parser qualified (tryParse)
+import Pos qualified (Mode(..))
 import Resolver qualified (resolveTop)
 import Runtime (Eff(Error))
 import Runtime qualified (runEffect)
@@ -21,21 +22,21 @@ import VM (runCode)
 main :: IO ()
 main = do
   setLocaleEncoding char8
-  config@Config{files} <- parseArgs <$> getArgs
+  config@Config{files,posMode} <- parseArgs <$> getArgs
   case files of
     [] -> error "no repl"
     _:_:_ -> error "too any args"
     [filename] -> do
       contents <- Text.pack <$> readFile filename
-      case Parser.tryParse contents of
+      case Parser.tryParse posMode contents of
         Left err -> abort 65 [err]
         Right decls -> do
-          case Resolver.resolveTop decls of
+          case Resolver.resolveTop posMode decls of
             errs@(_:_)-> abort 65 errs
             [] -> runMode config decls
 
 runMode :: Config -> [Stat] -> IO ()
-runMode Config{dis,mode} decls =
+runMode Config{dis,mode,posMode} decls =
   case mode of
     ModeTree -> do
       runEff (Interpreter.executeTopDecls decls)
@@ -55,19 +56,19 @@ runMode Config{dis,mode} decls =
         Right code -> do
           when dis $ putOut (Disassemble.dis code)
           writeBinaryFile path (Code.export code)
-
-runEff :: Eff () -> IO ()
-runEff eff = do
-  Runtime.runEffect putOut eff >>= \case
-    Right () -> pure ()
-    Left err -> abort 70 [err]
+  where
+    runEff :: Eff () -> IO ()
+    runEff eff = do
+      Runtime.runEffect posMode putOut eff >>= \case
+        Right () -> pure ()
+        Left err -> abort 70 [err]
 
 data Mode = ModeTree | ModeBCI | ModeExport FilePath
 
-data Config = Config { files :: [String], mode :: Mode, dis :: Bool }
+data Config = Config { files :: [String], mode :: Mode, dis :: Bool, posMode :: Pos.Mode }
 
 parseArgs :: [String] -> Config
-parseArgs = loop Config { files = [], mode = defaultMode, dis = False }
+parseArgs = loop Config { files = [], mode = defaultMode, dis = False, posMode = Pos.Brief }
   where
     defaultMode = ModeBCI
     loop acc = \case
@@ -75,6 +76,7 @@ parseArgs = loop Config { files = [], mode = defaultMode, dis = False }
       "-tree":xs -> loop acc { mode = ModeTree } xs
       "-bci":xs -> loop acc { mode = ModeBCI } xs
       "-dis":xs -> loop acc { dis = True } xs
+      "-col":xs -> loop acc { posMode = Pos.Verbose } xs
       "-export":x:xs -> loop acc { mode = ModeExport x } xs
       flag@('-':_):_ -> error ("unknown flag: " ++ flag)
       file:xs -> loop acc { files = file : files acc } xs

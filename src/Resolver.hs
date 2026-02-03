@@ -2,7 +2,8 @@ module Resolver (resolveTop) where
 
 import Control.Monad (ap,liftM)
 import Ast (Stat(..),Exp(..),Func(..),Identifier(..))
-import Pos (Pos,showPos)
+import Pos (Pos)
+import Pos qualified (Mode,showPos)
 import Text.Printf (printf)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -13,8 +14,8 @@ data Context = Context { scope :: Scope, withinClass :: Maybe Bool }
 
 type Res = [String]
 
-resolveTop :: [Stat] -> Res
-resolveTop xs = runCheck $ sequence_ [ resolveStatContext context x | x <- xs ]
+resolveTop :: Pos.Mode -> [Stat] -> Res
+resolveTop mode xs = runCheck mode $ sequence_ [ resolveStatContext context x | x <- xs ]
   where context = Context { scope = ScopeTop, withinClass = Nothing }
 
 resolveFunc :: Context -> Func -> Check ()
@@ -98,14 +99,14 @@ instance Monad Check where (>>=) = Bind
 
 type State = Maybe (Set String)
 
-runCheck :: Check () -> Res
-runCheck check = loop Nothing check $ \() _ -> []
+runCheck :: Pos.Mode -> Check () -> Res
+runCheck mode check = loop Nothing check $ \() _ -> []
   where
     loop :: State -> Check a -> (a -> State -> Res) -> Res
     loop s = \case
       Ret a -> \k -> k a s
       Bind m f -> \k -> loop s m $ \a s -> loop s (f a) k
-      Invalid pos mes -> \k -> invalid pos mes : k () s
+      Invalid pos mes -> \k -> invalid mode pos mes : k () s
       NestedScope m -> \k -> loop (Just Set.empty) m $ \a _ -> k a s
       Define Identifier{pos,name=x} -> do
         case s of
@@ -115,10 +116,10 @@ runCheck check = loop Nothing check $ \() _ -> []
               False -> \k -> do k () (Just (Set.insert x xs))
               True -> \k -> do
                 let mes = printf "'%s': Already a variable with this name in this scope." x
-                invalid pos mes : k () s
+                invalid mode pos mes : k () s
       IsNested -> \k -> do
         let nested = case s of Just{} -> True; Nothing -> False
         k nested s
 
-invalid :: Pos -> String -> String
-invalid pos mes = printf "%s Error at %s" (showPos pos) mes
+invalid :: Pos.Mode -> Pos -> String -> String
+invalid mode pos mes = printf "%s Error at %s" (Pos.showPos mode pos) mes

@@ -3,7 +3,8 @@ module Runtime (Eff(..),Ref,runEffect) where
 import Control.Monad (ap,liftM)
 import Data.IORef (IORef,newIORef,readIORef,writeIORef)
 import GHC.Int (Int64)
-import Pos (Pos,showPos)
+import Pos (Pos)
+import Pos qualified (Mode,showPos)
 import System.Clock (TimeSpec(..),getTime,Clock(Monotonic))
 import Text.Printf (printf)
 
@@ -26,8 +27,8 @@ type Ref a = IORef a
 
 data Down = Down { caller :: String, backtrace :: [(Pos,String)] }
 
-runEffect :: (String -> IO ()) -> Eff a -> IO (Either String a)
-runEffect putOut eff = do
+runEffect :: Pos.Mode -> (String -> IO ()) -> Eff a -> IO (Either String a)
+runEffect mode putOut eff = do
   start <- getTime Monotonic
   let
     loop :: Down -> Eff a -> (a -> IO (Either String b)) -> IO (Either String b)
@@ -51,7 +52,7 @@ runEffect putOut eff = do
         let Down{caller,backtrace} = d
         let bt = (pos,caller) : backtrace
         pure $ Left $ printf "%s%s" err $
-          concat [ printf "\n%s in %s" (showPos pos) context :: String
+          concat [ printf "\n%s in %s" (Pos.showPos mode pos) context :: String
                  | (pos,context) <- bt ]
 
   let down0 = Down { caller = "script", backtrace = [] }

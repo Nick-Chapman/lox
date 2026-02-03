@@ -5,32 +5,33 @@ import Control.Applicative (many)
 import Data.Text (Text)
 import Par4 (alts,position,satisfy,expect,reject,runParser)
 import Par4 qualified (Par,Config(..))
-import Pos (Pos,initPos,showPos)
+import Pos (Pos,initPos)
+import Pos qualified (Mode,showPos)
 import Scanner (Tok(..),scanner)
 import Text.Printf (printf)
 
 type Par = Par4.Par Pos Tok
 
-tryParse :: Text -> Either String [Stat]
-tryParse = either (Left . formatError) Right . runParser Par4.Config
+tryParse :: Pos.Mode -> Text -> Either String [Stat]
+tryParse mode = either (Left . formatError mode) Right . runParser Par4.Config
   { start
   , initPos
   , scanner
   }
 
-formatError :: (Pos,Text,Maybe String) -> String
-formatError (pos,text,opt) = do
+formatError :: Pos.Mode -> (Pos,Text,Maybe String) -> String
+formatError mode (pos,text,opt) = do
   case opt of
     Nothing -> do
       let tok = case scanner pos text of Nothing -> "EOF"; Just (x,_,_) -> show x
-      printf "%s Error: Unexpected '%s'." (showPos pos) tok
+      printf "%s Error: Unexpected '%s'." (Pos.showPos mode pos) tok
 
     -- No "at end"
-    Just (mes@"Unterminated string") -> printf "%s Error: %s." (showPos pos) mes
+    Just (mes@"Unterminated string") -> printf "%s Error: %s." (Pos.showPos mode pos) mes
 
     Just mes -> do
       let tok = case scanner pos text of Nothing -> "end"; Just (x,_,_) -> printf "'%s'" (show x)
-      printf "%s Error at %s: %s"(showPos pos) tok mes
+      printf "%s Error at %s: %s"(Pos.showPos mode pos) tok mes
 
 
 start :: Par [Stat]

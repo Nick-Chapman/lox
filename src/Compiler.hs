@@ -13,7 +13,7 @@ import Data.Set (Set,(\\),union,singleton)
 import Data.Set qualified as Set
 import OP (Op)
 import OP qualified
-import Pos (Pos)
+import Pos (Pos,toLine)
 import Text.Printf (printf)
 
 paramMode :: Mode
@@ -237,7 +237,7 @@ compStatThen env = \case
                        when (paramMode == ModeL) $ Emit OP.INDIRECT
                   | arg <- args ]
         Emit OP.CALL
-        Emit (OP.ARG pos)
+        Emit (OP.ARG (toLine pos))
         Emit (OP.ARG (length args))
 
       EThis{} -> undefined
