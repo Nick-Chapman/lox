@@ -106,11 +106,8 @@ compStatThen env = \case
 
   SVarDecl Identifier{pos=_pos,name} e -> \after -> do
     let check1 = isAssigned name after
-    -- when check1 $ error (show (_pos,name))
-    -- TODO: only use ModeL if a var is BOTH assigned AND closed-over
-    let mode =
-          --if True then ModeR else -- breaks 4 tests
-            if check1 then ModeL else ModeR
+    let check2 = isClosedOver name after
+    let mode = if check1 && check2 then ModeL else ModeR
     compExp e
     when (mode == ModeL) $ Emit OP.INDIRECT
     compStats (insertEnv name mode env) after
@@ -122,13 +119,10 @@ compStatThen env = \case
       Just exp -> compExp exp
     Emit OP.RETURN
 
-  SFunDecl func@Func{pos,name=Identifier{name=fname},formals,statements} -> \after -> mdo
+  me@(SFunDecl func@Func{pos,name=Identifier{name=fname},formals,statements}) -> \after -> mdo
     let check1 = isAssigned fname after
-    let mode =
-          --if True then ModeR else -- breaks 1 test (reassign-function-identifier)
-             -- but improves bench2 very much!
-            if check1 then ModeL else ModeR
-
+    let check2 = isClosedOver fname (me : after)
+    let mode = if check1 && check2 then ModeL else ModeR
     Emit (if (mode==ModeL) then OP.CLOSURE else OP.CLOSURE_noind)
     let free = Set.toList $ fvFunc func
     Emit (OP.ARG (length free))
@@ -327,6 +321,51 @@ lookupEnv pos name Env{m} =
 lookupMode :: String -> Env -> Mode -- for use in closing vars
 lookupMode name Env{m} =
   snd $ maybe undefined id $ Map.lookup name m
+
+----------------------------------------------------------------------
+-- is-closed-over calculation
+
+isClosedOver :: String -> [Stat] -> Bool
+isClosedOver name stats =
+  name `Set.member` cloStats stats
+
+
+cloExp :: Exp -> IdSet
+cloExp _ = Set.empty
+
+cloStats :: [Stat] -> IdSet
+cloStats = \case
+  [] -> Set.empty
+  s:ss -> cloStatThen s (cloStats ss)
+
+cloStatThen :: Stat -> IdSet -> IdSet
+cloStatThen = \case
+  SClassDecl{} -> \k -> undefined k
+  SVarDecl Identifier{name} e -> \k -> cloExp e `union` (k \\ singleton name)
+  SFunDecl func@Func{name=Identifier{name=fname}} -> \k ->
+    cloFunc func `union` (k \\ singleton fname)
+  s ->
+    \k -> cloStat s `union` k
+
+cloStat :: Stat -> IdSet
+cloStat = \case
+  SPrint e -> cloExp e
+  SExp e -> cloExp e
+  SBlock stats -> cloStats stats
+  SIf cond s1 s2 -> Set.unions [ cloExp cond, cloStat s1, cloStat s2 ]
+  SWhile cond stat -> cloExp cond `union` cloStat stat
+  SFor (init,cond,update) body -> do
+    let deSugared = SBlock [ init , SWhile cond $ SBlock [body,update] ]
+    cloStat deSugared
+  SReturn _ Nothing ->  Set.empty
+  SReturn _ (Just e) -> cloExp e
+  SVarDecl{} -> error "cloStat/VarDecl"
+  SFunDecl{} -> error "cloStat/FunDecl"
+  SClassDecl{} -> error "cloStat/ClcloDecl"
+
+cloFunc :: Func -> IdSet
+cloFunc Func{formals,statements} =
+  fvStats statements \\ Set.fromList [ name | Identifier{name} <- formals ]
 
 ----------------------------------------------------------------------
 -- is-assigned calculation
