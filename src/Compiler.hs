@@ -103,10 +103,10 @@ compStatThen env = \case
     let deSugared = SBlock [ init , SWhile cond $ SBlock [body,update] ]
     compStatThen env deSugared k
 
-  SVarDecl x e -> \k -> do
+  SVarDecl Identifier{name} e -> \k -> do
     compExp e
     when (sharing) $ Emit OP.INDIRECT
-    k (insertEnv' x env)
+    k (insertEnv name env)
     Emit OP.POP
 
   SReturn _pos expOpt -> \_ignoreK -> do
@@ -115,27 +115,27 @@ compStatThen env = \case
       Just exp -> compExp exp
     Emit OP.RETURN
 
-  SFunDecl func@Func{pos,name=fname@Identifier{name=funcName},formals,statements} -> \k -> mdo
+  SFunDecl func@Func{pos,name=Identifier{name=fname},formals,statements} -> \k -> mdo
     let free = Set.toList $ fvFunc func
     Emit (if sharing then OP.CLOSURE else OP.CLOSURE_noind)
     Emit (OP.ARG (length free))
     forwards def
-    sequence_ [ emitCloseVar pos x (insertEnv' fname env) | x <- free ]
+    sequence_ [ emitCloseVar pos x (insertEnv fname env) | x <- free ]
     Emit OP.JUMP; forwards after
 
     newline
-    embedFunctionName (printf "<fn %s>\0" funcName)
+    embedFunctionName (printf "<fn %s>\0" fname)
     def <- Here
     let arity = length formals
     Emit (OP.ARG arity)
-    let subEnv = foldl (flip insertEnv') (frameEnv free) formals
+    let subEnv = foldl (flip insertEnv) (frameEnv free) [ name | Identifier{name} <- formals ]
     compStats subEnv statements
     Emit OP.NIL
     Emit OP.RETURN
     newline
 
     after <- Here
-    k (insertEnv' fname env)
+    k (insertEnv fname env)
     Emit OP.POP
 
   SClassDecl{} -> do undefined
@@ -300,10 +300,6 @@ emptyEnv = Env { d = 0, m = Map.empty }
 
 frameEnv :: [String] -> Env
 frameEnv xs = Env { d = 1, m = Map.fromList [ (x,VFrame n) | (n,x) <- zip [0..] xs] }
-
-insertEnv' :: Identifier -> Env -> Env -- TODO inline
-insertEnv' Identifier{name} env =
-  insertEnv name env
 
 insertEnv :: String -> Env -> Env
 insertEnv name Env{d,m} =
