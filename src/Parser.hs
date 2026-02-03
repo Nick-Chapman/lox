@@ -80,6 +80,7 @@ start = program where
     pure (SFunDecl fun)
 
   funDef = do
+    pos <- position
     name <- identifier
     sym "(";
     xs <- parameters
@@ -93,7 +94,7 @@ start = program where
       ]
     statements <- many decl
     sym "}"
-    pure Func{ name, formals = xs, statements }
+    pure Func{ pos, name, formals = xs, statements }
 
   stat =
     alts [returnStat, forStat, whileStat, ifStat, printStat, blockStat, expressionStat]

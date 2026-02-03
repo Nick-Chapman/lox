@@ -15,7 +15,8 @@ data Stat
   | SClassDecl Identifier (Maybe Identifier) [Func]
 
 data Func = Func
-  { name :: Identifier
+  { pos :: Pos
+  , name :: Identifier
   , formals :: [Identifier]
   , statements :: [Stat]
   }

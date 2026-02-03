@@ -42,6 +42,7 @@ data Op
   | SETUP_CALL
   | ENTER
   | CLOSURE
+  | CLOSURE_noind
   | RETURN
 
   | CLOCK
@@ -87,6 +88,7 @@ encode = c2w . \case
   OP.SETUP_CALL         -> 'D'
   OP.ENTER              -> 'E'
   OP.CLOSURE            -> 'F'
+  OP.CLOSURE_noind      -> 'G'
   OP.RETURN             -> 'R'
 
   OP.CLOCK              -> '@'

@@ -13,7 +13,7 @@ import Data.Set (Set,(\\),union,singleton)
 import Data.Set qualified as Set
 import OP (Op)
 import OP qualified
-import Pos (Pos,initPos)
+import Pos (Pos)
 import Text.Printf (printf)
 
 sharing :: Bool -- control extra indirection needed for sharing semantics
@@ -31,7 +31,7 @@ nativeClock :: Env -> (Env -> Asm ()) -> Asm ()
 nativeClock env k = mdo
   let arity = 0
   let numFree = 0
-  Emit OP.CLOSURE
+  Emit (if sharing then OP.CLOSURE else OP.CLOSURE_noind)
   Emit (OP.ARG numFree)
   forwards def
   Emit OP.JUMP; forwards after
@@ -44,7 +44,6 @@ nativeClock env k = mdo
   newline
 
   after <- Here
-  when (sharing) $ Emit OP.INDIRECT
   k (insertEnv "clock" env)
 
 compStats :: Env -> [Stat] -> Asm ()
@@ -116,12 +115,12 @@ compStatThen env = \case
       Just exp -> compExp exp
     Emit OP.RETURN
 
-  SFunDecl func@Func{name=fname@Identifier{name=funcName},formals,statements} -> \k -> mdo
+  SFunDecl func@Func{pos,name=fname@Identifier{name=funcName},formals,statements} -> \k -> mdo
     let free = Set.toList $ fvFunc func
-    Emit OP.CLOSURE
+    Emit (if sharing then OP.CLOSURE else OP.CLOSURE_noind)
     Emit (OP.ARG (length free))
     forwards def
-    sequence_ [ emitCloseVar x | x <- free ]
+    sequence_ [ emitCloseVar pos x (insertEnv' fname env) | x <- free ]
     Emit OP.JUMP; forwards after
 
     newline
@@ -129,14 +128,13 @@ compStatThen env = \case
     def <- Here
     let arity = length formals
     Emit (OP.ARG arity)
-    let subEnv = foldl (flip insertEnv') (frameEnv free) (fname:formals)
+    let subEnv = foldl (flip insertEnv') (frameEnv free) formals
     compStats subEnv statements
     Emit OP.NIL
     Emit OP.RETURN
     newline
 
     after <- Here
-    when (sharing) $ Emit OP.INDIRECT
     k (insertEnv' fname env)
     Emit OP.POP
 
@@ -144,10 +142,9 @@ compStatThen env = \case
 
   where
 
-    emitCloseVar :: String -> Asm ()
-    emitCloseVar name = do
-      let pos = initPos
-      lookupEnv pos name env >>= \case
+    emitCloseVar :: Pos -> String -> Env -> Asm ()
+    emitCloseVar pos name env' = do
+      lookupEnv pos name env' >>= \case
         VLocal n -> do
           Emit (OP.ARG 1)
           Emit (OP.ARG n)
@@ -294,7 +291,7 @@ newline = embedText "\n"
 ----------------------------------------------------------------------
 -- environment
 
-data Var = VLocal Int | VFrame Int
+data Var = VLocal Int | VFrame Int deriving Show
 
 data Env = Env { d :: Int, m :: Map String Var }
 
@@ -302,9 +299,9 @@ emptyEnv :: Env
 emptyEnv = Env { d = 0, m = Map.empty }
 
 frameEnv :: [String] -> Env
-frameEnv xs = Env { d = 0, m = Map.fromList [ (x,VFrame n) | (n,x) <- zip [0..] xs] }
+frameEnv xs = Env { d = 1, m = Map.fromList [ (x,VFrame n) | (n,x) <- zip [0..] xs] }
 
-insertEnv' :: Identifier -> Env -> Env
+insertEnv' :: Identifier -> Env -> Env -- TODO inline
 insertEnv' Identifier{name} env =
   insertEnv name env
 
@@ -348,7 +345,7 @@ fvStatThen = \case
   SClassDecl{} -> \k -> undefined k
   SVarDecl Identifier{name} e -> \k -> fvExp e `union` (k \\ singleton name)
   SFunDecl func@Func{name=Identifier{name=fname}} -> \k ->
-    fvFunc func `union` (k \\ singleton fname)
+    (fvFunc func `union` k) \\ singleton fname
   s ->
     \k -> fvStat s `union` k
 
@@ -369,8 +366,8 @@ fvStat = \case
   SClassDecl{} -> error "fvStat/ClassDecl"
 
 fvFunc :: Func -> IdSet
-fvFunc Func{name=fname,formals,statements} =
-  fvStats statements \\ Set.fromList [ name | Identifier{name} <- fname:formals ]
+fvFunc Func{formals,statements} =
+  fvStats statements \\ Set.fromList [ name | Identifier{name} <- formals ]
 
 ----------------------------------------------------------------------
 -- ASM

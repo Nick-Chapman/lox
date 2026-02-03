@@ -1,7 +1,7 @@
 module VM (runCode) where
 
 import Code (Code(..))
-import Control.Monad (ap,liftM)
+import Control.Monad (ap,liftM,when)
 import Data.ByteString.Internal (w2c)
 import Data.List (isSuffixOf)
 import OP (Op)
@@ -125,24 +125,8 @@ dispatch pos = \case
       _v -> do
         Effect (Runtime.Error pos "Can only call functions and classes.")
 
-  OP.CLOSURE -> do
-    numUpvalues <- FetchArg
-    dist <- fetchShort
-    codePointer <- (+ dist) <$> GetIP
-    let
-      collectUpValue :: VM (Ref Value)
-      collectUpValue = do
-        mode <- FetchArg
-        i <- FetchArg
-        r <- case mode of
-          1 -> GetSlot i
-          2 -> GetUpValue i
-          _ -> error "collectUpValue/mode"
-        v <- Effect (ReadRef r)
-        Effect (NewRef v)
-
-    upValues <- sequence $ replicate numUpvalues collectUpValue
-    Push $ VFunc FuncDef{ codePointer, upValues }
+  OP.CLOSURE -> makeClosure True
+  OP.CLOSURE_noind -> makeClosure False
 
   OP.RETURN -> do
     res <- Pop
@@ -161,6 +145,29 @@ dispatch pos = \case
   OP.ARG{} ->
     error "dispatch/OP_ARG"
 
+makeClosure :: Bool -> VM ()
+makeClosure sharing = do
+  numUpvalues <- FetchArg
+  dist <- fetchShort
+  codePointer <- (+ dist) <$> GetIP
+  let
+    collectUpValue :: Ref Value -> VM ()
+    collectUpValue target = do
+      mode <- FetchArg
+      i <- FetchArg
+      r <- case mode of
+        1 -> GetSlot i
+        2 -> GetUpValue i
+        _ -> error "collectUpValue/mode"
+      v <- Effect (ReadRef r)
+      Effect (WriteRef target v)
+  upValues <- sequence (replicate numUpvalues (Effect (NewRef VNil)))
+  Push $ VFunc FuncDef{ codePointer, upValues }
+  when (sharing) $ do
+    v <- Pop
+    r <- Effect (NewRef v)
+    Push (VIndirection r)
+  sequence_ [ do collectUpValue target | target <- upValues]
 
 execBinary :: Pos -> (a -> Value) -> (Double -> Double -> a) -> VM ()
 execBinary pos mk f = do

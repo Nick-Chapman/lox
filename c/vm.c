@@ -48,6 +48,7 @@ typedef enum {
   OP_SETUP_CALL         = 'D',
   OP_ENTER              = 'E',
   OP_CLOSURE            = 'F',
+  OP_CLOSURE_noind      = 'G', //optimization
   OP_RETURN             = 'R',
 
   OP_CLOCK              = '@',
@@ -545,30 +546,51 @@ void run_code(Code code,VM* vm) {
       }
       break;
     }
+
+#define FILL_CLOSURE \
+      for (int u = 0; u < num_ups; u++) { \
+        u8 mode = ARG; \
+        u8 arg = ARG; \
+        switch (mode) { \
+        case 1: { \
+          Value value = vm->base[arg]; \
+          closure->ups[u] = value; \
+          break; \
+        } \
+        case 2: { \
+          Value value = vm->ups[arg]; \
+          closure->ups[u] = value; \
+          break; \
+        } \
+        default: { printf("unknown closure mode: %d\n",mode); exit(1); } \
+        } \
+      } \
+
     case OP_CLOSURE: {
       u8 num_ups = ARG;
       u8 dist = SHORT;
       u8* code = ip + dist;
       ObjClosure* closure = makeClosure(code,num_ups);
-      for (int u = 0; u < num_ups; u++) {
-        u8 mode = ARG;
-        u8 arg = ARG;
-        switch (mode) {
-        case 1: {
-          Value value = vm->base[arg];
-          closure->ups[u] = value;
-          break;
-        }
-        case 2: {
-          Value value = vm->ups[arg];
-          closure->ups[u] = value;
-          break;
-        }
-        default: { printf("unknown closure mode: %d\n",mode); exit(1); }
-        }
-      }
       Value value = ValueOfClosure(closure);
       PUSH(value);
+      {
+        // indirection...
+        Value v1 = TOP;
+        Value* ind = makeIndirection(v1);
+        Value value = ValueOfIndirection(ind);
+        TOP = value;
+      }
+      FILL_CLOSURE
+      break;
+    }
+    case OP_CLOSURE_noind: {
+      u8 num_ups = ARG;
+      u8 dist = SHORT;
+      u8* code = ip + dist;
+      ObjClosure* closure = makeClosure(code,num_ups);
+      Value value = ValueOfClosure(closure);
+      PUSH(value);
+      FILL_CLOSURE
       break;
     }
     case OP_RETURN: {
