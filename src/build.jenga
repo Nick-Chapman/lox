@@ -22,34 +22,7 @@ default-extensions:
   echo GADTs >> $@
   echo RecursiveDo >> $@
 
-
 packages:
   echo clock >> $@
   echo filepath >> $@
   echo text >> $@
-
-# These dependencies are not discovered by gcc -M (not sure why)
-xdepends:
-  echo 'Interpreter.o : Par4.hi' >> $@
-  echo 'Value.o : Par4.hi' >> $@
-  echo 'Value.o : Runtime.hi' >> $@
-  echo 'Value.o : Pos.hi' >> $@
-  echo 'Parser.o : Pos.hi' >> $@
-  echo 'Interpreter.o : Pos.hi' >> $@
-  echo 'Lox.o : Pos.hi' >> $@
-  echo 'Lox.o : Ast.hi' >> $@
-  echo 'Lox.o : Par4.hi' >> $@
-  echo 'Lox.o : Runtime.hi' >> $@
-  echo 'Lox.o : Value.hi' >> $@
-  echo 'main.o : Par4.hi' >> $@
-  echo 'main.o : Ast.hi' >> $@
-  echo 'main.o : Parser.hi' >> $@
-  echo 'main.o : Interpreter.hi' >> $@
-  echo 'main.o : Runtime.hi' >> $@
-  echo 'Interpreter.o : Runtime.hi' >> $@
-  echo 'Compiler.o : VM.hi' >> $@
-  echo 'Lox.o : VM.hi' >> $@
-  echo 'Compiler.o : Value.hi' >> $@
-  echo 'Compiler.o : OP.hi' >> $@
-  echo 'Compiler.o : Runtime.hi' >> $@
-  echo 'Lox.o : OP.hi' >> $@
