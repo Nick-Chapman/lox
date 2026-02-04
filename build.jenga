@@ -5,7 +5,7 @@ example:
   echo -n ~/code/lox/examples/lazy.lox > $out
 
 *five-ways: example @example src/lox.exe c/vm.exe
-  echo "#J"; ~/.local/bin/jlox $$(cat example)
+  #echo "#J"; ~/.local/bin/jlox $$(cat example)
   #echo "#C"; ~/.local/bin/clox $$(cat example)
   echo "#T"; ./lox.exe -col -tree $$(cat example)
   #echo "#H"; ./lox.exe -col -bci $$(cat example)

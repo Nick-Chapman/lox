@@ -1,10 +1,16 @@
 
 // Compute fib using Lazy streams
 
-fun print_list(xs) {
-  fun e() { print "MT"; }
-  fun c(x,xs) { print x; print_list(xs); }
-  xs()(e,c);
+// fun print_list(xs) {
+//   fun e() { print "MT"; }
+//   fun c(x,xs) { print x; print_list(xs); }
+//   xs()(e,c);
+// }
+
+fun sum_list(xs) {
+  fun e() { return 0; }
+  fun c(x,xs) { return x + sum_list(xs); }
+  return xs()(e,c);
 }
 
 fun empty() {
@@ -75,12 +81,41 @@ fun fix(f) {
   return fixed;
 }
 
-fun add(x,y) { return x+y; }
+fun test() {
+  var A = 0;
+  fun add(x,y) { A=A+1; return x+y; }
 
-fun mkFibs(fibs) {
-  return cons (1, cons(1, zipWith(add, fibs, drop(1,fibs))));
+  fun mkFibs(fibs) {
+    return cons (1, cons(1, zipWith(add, fibs, drop(1,fibs))));
+  }
+
+  var fibs = fix(mkFibs);
+
+  var res = sum_list(take(1,(drop(30,fibs))));
+
+  if (A != 29) {
+    print "unexpected A";
+    print A;
+  }
+  return res;
 }
 
-var fibs = fix(mkFibs);
 
-print_list(take(15,fibs));
+var start = clock();
+var sum = 0;
+var i = 0;
+var rep = 10000;
+while (i < rep) {
+  var res = test();
+  //print res;
+  sum = sum + res;
+  i = 1+i;
+}
+
+
+if (sum != rep * 1346269) {
+  print "unexpected sum";
+  print sum;
+}
+
+print clock() - start;

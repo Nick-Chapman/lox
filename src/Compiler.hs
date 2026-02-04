@@ -320,7 +320,8 @@ lookupEnv pos name Env{m} =
 
 lookupMode :: String -> Env -> Mode -- for use in closing vars
 lookupMode name Env{m} =
-  snd $ maybe undefined id $ Map.lookup name m
+  snd $ maybe err id $ Map.lookup name m
+  where err = error (show("lookupMode",name))
 
 ----------------------------------------------------------------------
 -- is-closed-over calculation
