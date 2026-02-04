@@ -43,11 +43,11 @@ dispatch pos = \case
   OP.POP -> do
     _ <- Pop
     pure ()
-  OP.GET_LOCAL -> do
+  OP.GET_LOCAL_REF -> do
     i <- FetchArg
     r <- GetSlot i
     Push (VIndirection r)
-  OP.GET_UPVALUE -> do
+  OP.GET_UPVALUE_REF -> do
     i <- FetchArg
     r <- GetUpValue i
     Push (VIndirection r)

@@ -48,8 +48,8 @@ disMaybeDef = do
         OP.FALSE -> op0
         OP.POP -> op0
 
-        OP.GET_LOCAL -> op1
-        OP.GET_UPVALUE -> op1
+        OP.GET_LOCAL_REF -> op1
+        OP.GET_UPVALUE_REF -> op1
 
         OP.INDIRECT -> op0
         OP.DEREF -> op0

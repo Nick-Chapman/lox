@@ -248,8 +248,8 @@ compStatThen env = \case
 
 compVarAccess :: Var -> Asm ()
 compVarAccess = \case
-  VLocal n -> do Emit OP.GET_LOCAL; Emit (OP.ARG n)
-  VFrame n -> do Emit OP.GET_UPVALUE; Emit (OP.ARG n)
+  VLocal n -> do Emit OP.GET_LOCAL_REF; Emit (OP.ARG n)
+  VFrame n -> do Emit OP.GET_UPVALUE_REF; Emit (OP.ARG n)
 
 compMode :: Mode -> Asm ()
 compMode = \case

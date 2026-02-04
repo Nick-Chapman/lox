@@ -22,8 +22,8 @@ typedef enum {
   OP_FALSE              = 'f',
 
   OP_POP                = '_',
-  OP_GET_LOCAL          = '/',
-  OP_GET_UPVALUE        = '\\',
+  OP_GET_LOCAL_REF      = '/',
+  OP_GET_UPVALUE_REF    = '\\',
 
   OP_INDIRECT           = '&',
   OP_DEREF              = '*',
@@ -410,14 +410,14 @@ void run_code(Code code,VM* vm) {
       POP;
       break;
     }
-    case OP_GET_LOCAL: {
+    case OP_GET_LOCAL_REF: {
       u8 arg = ARG;
       Value* ind = &vm->base[arg];
       Value value = ValueOfIndirection(ind);
       PUSH(value);
       break;
     }
-    case OP_GET_UPVALUE: {
+    case OP_GET_UPVALUE_REF: {
       u8 arg = ARG;
       Value* ind = &vm->ups[arg];
       Value value = ValueOfIndirection(ind);

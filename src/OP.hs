@@ -16,8 +16,8 @@ data Op
   | FALSE
 
   | POP
-  | GET_LOCAL
-  | GET_UPVALUE
+  | GET_LOCAL_REF
+  | GET_UPVALUE_REF
 
   | INDIRECT
   | DEREF
@@ -61,8 +61,8 @@ encode = c2w . \case
   OP.FALSE              -> 'f'
 
   OP.POP                -> '_'
-  OP.GET_LOCAL          -> '/'
-  OP.GET_UPVALUE        -> '\\'
+  OP.GET_LOCAL_REF      -> '/'
+  OP.GET_UPVALUE_REF    -> '\\'
 
   OP.INDIRECT           -> '&'
   OP.DEREF              -> '*'
