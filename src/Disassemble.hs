@@ -47,9 +47,7 @@ disMaybeDef = do
         OP.TRUE -> op0
         OP.FALSE -> op0
         OP.POP -> op0
-
-        OP.GET_LOCAL_REF -> op1
-        OP.GET_UPVALUE_REF -> op1
+        OP.INDIRECT -> op0
 
         OP.GET_LOCAL -> op1
         OP.GET_LOCAL_ind -> op1
@@ -60,9 +58,6 @@ disMaybeDef = do
         OP.SET_UPVALUE -> op1
         OP.SET_UPVALUE_ind -> op1
 
-        OP.INDIRECT -> op0
-        OP.DEREF -> op0
-        OP.ASSIGN -> op0
         OP.EQUAL -> op0
         OP.GREATER -> op0
         OP.LESS -> op0
@@ -73,6 +68,7 @@ disMaybeDef = do
         OP.NOT -> op0
         OP.NEGATE -> op0
         OP.PRINT -> op0
+        OP.CLOCK -> op0
 
         OP.JUMP -> do
           loc <- fetchForards
@@ -97,14 +93,14 @@ disMaybeDef = do
           MarkDef loc
           pure (printf "%s(#free=%d, loc=%d)" (show op) nfree loc)
 
-        OP.CLOSURE_noind -> do
+        OP.CLOSURE_ind -> do
           nfree <- fetchArg
           loc <- fetchForards
           MarkDef loc
           pure (printf "%s(#free=%d, loc=%d)" (show op) nfree loc)
 
+
         OP.RETURN -> op0
-        OP.CLOCK -> op0
 
 disText :: [Int] -> Dis String
 disText ns = do

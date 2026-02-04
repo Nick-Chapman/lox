@@ -35,7 +35,7 @@ nativeClock :: Env -> (Env -> Asm ()) -> Asm ()
 nativeClock env k = mdo
   let arity = 0
   let numFree = 0
-  Emit (if (clockMode == ModeL) then OP.CLOSURE else OP.CLOSURE_noind)
+  Emit (if (clockMode == ModeL) then OP.CLOSURE_ind else OP.CLOSURE)
   Emit (OP.ARG numFree)
   forwards def
   Emit OP.JUMP; forwards after
@@ -123,7 +123,7 @@ compStatThen env = \case
     let check1 = isAssigned fname after
     let check2 = isClosedOver fname (me : after)
     let mode = if check1 && check2 then ModeL else ModeR
-    Emit (if (mode==ModeL) then OP.CLOSURE else OP.CLOSURE_noind)
+    Emit (if (mode==ModeL) then OP.CLOSURE_ind else OP.CLOSURE)
     let free = Set.toList $ fvFunc func
     Emit (OP.ARG (length free))
     forwards def
@@ -202,9 +202,6 @@ compStatThen env = \case
 
       EVar Identifier{pos,name} -> do
         (var,mode) <- lookupEnv pos name env
-        --compVarAccess var
-        --compMode mode
-        --Emit OP.DEREF
         case (var,mode) of
           (VLocal n,ModeR) -> do Emit OP.GET_LOCAL; Emit (OP.ARG n)
           (VLocal n,ModeL) -> do Emit OP.GET_LOCAL_ind; Emit (OP.ARG n)
@@ -214,9 +211,6 @@ compStatThen env = \case
       EAssign Identifier{pos,name} e -> do
         compExp e
         (var,mode) <- lookupEnv pos name env
-        --compVarAccess var
-        --compMode mode
-        --Emit OP.ASSIGN
         case (var,mode) of
           (VLocal n,ModeR) -> do Emit OP.SET_LOCAL; Emit (OP.ARG n)
           (VLocal n,ModeL) -> do Emit OP.SET_LOCAL_ind; Emit (OP.ARG n)
@@ -254,19 +248,6 @@ compStatThen env = \case
       ESuperVar{} -> undefined
       EGetProp{} -> undefined
       ESetProp{} -> undefined
-
-
-{-
-compVarAccess :: Var -> Asm ()
-compVarAccess = \case
-  VLocal n -> do Emit OP.GET_LOCAL_REF; Emit (OP.ARG n)
-  VFrame n -> do Emit OP.GET_UPVALUE_REF; Emit (OP.ARG n)
-
-compMode :: Mode -> Asm ()
-compMode = \case
-  ModeL -> Emit OP.DEREF
-  ModeR -> pure ()
--}
 
 forwards :: Int -> Asm ()
 forwards a = mdo

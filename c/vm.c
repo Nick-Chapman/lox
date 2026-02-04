@@ -16,14 +16,11 @@ typedef enum {
 
   OP_NUMBER             = '#',
   OP_STRING             = '$',
-
   OP_NIL                = 'z',
   OP_TRUE               = 't',
   OP_FALSE              = 'f',
-
   OP_POP                = '_',
-  OP_GET_LOCAL_REF      = '/',
-  OP_GET_UPVALUE_REF    = '\\',
+  OP_INDIRECT           = '&',
 
   OP_GET_LOCAL          = '0',
   OP_GET_LOCAL_ind      = '1',
@@ -34,10 +31,6 @@ typedef enum {
   OP_SET_UPVALUE        = '6',
   OP_SET_UPVALUE_ind    = '7',
 
-  OP_INDIRECT           = '&',
-  OP_DEREF              = '*',
-  OP_ASSIGN             = '=',
-
   OP_EQUAL              = 'e',
   OP_GREATER            = 'g',
   OP_LESS               = 'l',
@@ -47,8 +40,8 @@ typedef enum {
   OP_DIVIDE             = 'd',
   OP_NOT                = 'n',
   OP_NEGATE             = 'i',
-
   OP_PRINT              = 'p',
+  OP_CLOCK              = '@',
 
   OP_JUMP               = 'J', // jump forwards
   OP_JUMP_IF_FALSE      = 'B', // branch forwards
@@ -56,10 +49,8 @@ typedef enum {
 
   OP_CALL               = 'C',
   OP_CLOSURE            = 'F',
-  OP_CLOSURE_noind      = 'G', //optimization
+  OP_CLOSURE_ind        = 'G',
   OP_RETURN             = 'R',
-
-  OP_CLOCK              = '@',
 
 } OpCode;
 
@@ -419,20 +410,6 @@ void run_code(Code code,VM* vm) {
       POP;
       break;
     }
-    case OP_GET_LOCAL_REF: {
-      u8 arg = ARG;
-      Value* ind = &vm->base[arg];
-      Value value = ValueOfIndirection(ind);
-      PUSH(value);
-      break;
-    }
-    case OP_GET_UPVALUE_REF: {
-      u8 arg = ARG;
-      Value* ind = &vm->ups[arg];
-      Value value = ValueOfIndirection(ind);
-      PUSH(value);
-      break;
-    }
 
     case OP_GET_LOCAL: {
       u8 arg = ARG;
@@ -491,17 +468,6 @@ void run_code(Code code,VM* vm) {
       Value* ind = makeIndirection(v1);
       Value value = ValueOfIndirection(ind);
       TOP = value;
-      break;
-    }
-    case OP_DEREF: {
-      Value value = *AsIndirection(TOP);
-      TOP = value;
-      break;
-    }
-    case OP_ASSIGN: {
-      Value target = POP;
-      Value value = TOP; //peek
-      *AsIndirection(target) = value;
       break;
     }
 
@@ -628,6 +594,16 @@ void run_code(Code code,VM* vm) {
       ObjClosure* closure = makeClosure(code,num_ups);
       Value value = ValueOfClosure(closure);
       PUSH(value);
+      FILL_CLOSURE
+      break;
+    }
+    case OP_CLOSURE_ind: {
+      u8 num_ups = ARG;
+      u8 dist = SHORT;
+      u8* code = ip + dist;
+      ObjClosure* closure = makeClosure(code,num_ups);
+      Value value = ValueOfClosure(closure);
+      PUSH(value);
       {
         // indirection...
         Value v1 = TOP;
@@ -635,16 +611,6 @@ void run_code(Code code,VM* vm) {
         Value value = ValueOfIndirection(ind);
         TOP = value;
       }
-      FILL_CLOSURE
-      break;
-    }
-    case OP_CLOSURE_noind: {
-      u8 num_ups = ARG;
-      u8 dist = SHORT;
-      u8* code = ip + dist;
-      ObjClosure* closure = makeClosure(code,num_ups);
-      Value value = ValueOfClosure(closure);
-      PUSH(value);
       FILL_CLOSURE
       break;
     }

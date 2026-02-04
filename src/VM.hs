@@ -43,14 +43,6 @@ dispatch pos = \case
   OP.POP -> do
     _ <- Pop
     pure ()
-  OP.GET_LOCAL_REF -> do
-    i <- FetchArg
-    r <- GetSlot i
-    Push (VIndirection r)
-  OP.GET_UPVALUE_REF -> do
-    i <- FetchArg
-    r <- GetUpValue i
-    Push (VIndirection r)
 
   OP.GET_LOCAL -> do
     i <- FetchArg
@@ -101,14 +93,6 @@ dispatch pos = \case
     v <- Pop
     r <- Effect (NewRef v)
     Push (VIndirection r)
-  OP.DEREF -> do
-    r <- asIndirection <$> Pop
-    v <- Effect (ReadRef r)
-    Push v
-  OP.ASSIGN -> do
-    r <- asIndirection <$> Pop
-    v <- Peek
-    Effect (WriteRef r v)
 
   OP.EQUAL -> do
     v2 <- Pop
@@ -166,8 +150,8 @@ dispatch pos = \case
       _v -> do
         Effect (Runtime.Error (Pos.ofLine pos) "Can only call functions and classes.")
 
-  OP.CLOSURE -> makeClosure True
-  OP.CLOSURE_noind -> makeClosure False
+  OP.CLOSURE -> makeClosure False
+  OP.CLOSURE_ind -> makeClosure True
 
   OP.RETURN -> do
     res <- Pop
