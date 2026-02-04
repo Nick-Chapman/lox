@@ -19,6 +19,15 @@ data Op
   | GET_LOCAL_REF
   | GET_UPVALUE_REF
 
+  | GET_LOCAL
+  | GET_LOCAL_ind
+  | GET_UPVALUE
+  | GET_UPVALUE_ind
+  | SET_LOCAL
+  | SET_LOCAL_ind
+  | SET_UPVALUE
+  | SET_UPVALUE_ind
+
   | INDIRECT
   | DEREF
   | ASSIGN
@@ -63,6 +72,15 @@ encode = c2w . \case
   OP.POP                -> '_'
   OP.GET_LOCAL_REF      -> '/'
   OP.GET_UPVALUE_REF    -> '\\'
+
+  OP.GET_LOCAL          -> '0'
+  OP.GET_LOCAL_ind      -> '1'
+  OP.GET_UPVALUE        -> '2'
+  OP.GET_UPVALUE_ind    -> '3'
+  OP.SET_LOCAL          -> '4'
+  OP.SET_LOCAL_ind      -> '5'
+  OP.SET_UPVALUE        -> '6'
+  OP.SET_UPVALUE_ind    -> '7'
 
   OP.INDIRECT           -> '&'
   OP.DEREF              -> '*'

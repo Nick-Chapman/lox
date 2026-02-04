@@ -202,16 +202,26 @@ compStatThen env = \case
 
       EVar Identifier{pos,name} -> do
         (var,mode) <- lookupEnv pos name env
-        compVarAccess var
-        compMode mode
-        Emit OP.DEREF
+        --compVarAccess var
+        --compMode mode
+        --Emit OP.DEREF
+        case (var,mode) of
+          (VLocal n,ModeR) -> do Emit OP.GET_LOCAL; Emit (OP.ARG n)
+          (VLocal n,ModeL) -> do Emit OP.GET_LOCAL_ind; Emit (OP.ARG n)
+          (VFrame n,ModeR) -> do Emit OP.GET_UPVALUE; Emit (OP.ARG n)
+          (VFrame n,ModeL) -> do Emit OP.GET_UPVALUE_ind; Emit (OP.ARG n)
 
       EAssign Identifier{pos,name} e -> do
         compExp e
         (var,mode) <- lookupEnv pos name env
-        compVarAccess var
-        compMode mode
-        Emit OP.ASSIGN
+        --compVarAccess var
+        --compMode mode
+        --Emit OP.ASSIGN
+        case (var,mode) of
+          (VLocal n,ModeR) -> do Emit OP.SET_LOCAL; Emit (OP.ARG n)
+          (VLocal n,ModeL) -> do Emit OP.SET_LOCAL_ind; Emit (OP.ARG n)
+          (VFrame n,ModeR) -> undefined $ do Emit OP.SET_UPVALUE; Emit (OP.ARG n) -- never hit yet
+          (VFrame n,ModeL) -> do Emit OP.SET_UPVALUE_ind; Emit (OP.ARG n)
 
       ELogicalAnd e1 e2 -> mdo
         compExp e1
@@ -246,6 +256,7 @@ compStatThen env = \case
       ESetProp{} -> undefined
 
 
+{-
 compVarAccess :: Var -> Asm ()
 compVarAccess = \case
   VLocal n -> do Emit OP.GET_LOCAL_REF; Emit (OP.ARG n)
@@ -255,6 +266,7 @@ compMode :: Mode -> Asm ()
 compMode = \case
   ModeL -> Emit OP.DEREF
   ModeR -> pure ()
+-}
 
 forwards :: Int -> Asm ()
 forwards a = mdo

@@ -52,6 +52,51 @@ dispatch pos = \case
     r <- GetUpValue i
     Push (VIndirection r)
 
+  OP.GET_LOCAL -> do
+    i <- FetchArg
+    r <- GetSlot i
+    v <- Effect (ReadRef r)
+    Push v
+  OP.GET_LOCAL_ind -> do
+    i <- FetchArg
+    r <- GetSlot i
+    v <- Effect (ReadRef r)
+    v <- Effect (ReadRef (asIndirection v))
+    Push v
+  OP.GET_UPVALUE -> do
+    i <- FetchArg
+    r <- GetUpValue i
+    v <- Effect (ReadRef r)
+    Push v
+  OP.GET_UPVALUE_ind -> do
+    i <- FetchArg
+    r <- GetUpValue i
+    r <- asIndirection <$> Effect (ReadRef r)
+    v <- Effect (ReadRef r)
+    Push v
+  OP.SET_LOCAL -> do
+    i <- FetchArg
+    r <- GetSlot i
+    v <- Peek
+    Effect (WriteRef r v)
+  OP.SET_LOCAL_ind -> do
+    i <- FetchArg
+    r <- GetSlot i
+    r <- asIndirection <$> Effect (ReadRef r)
+    v <- Peek
+    Effect (WriteRef r v)
+  OP.SET_UPVALUE -> undefined $ do -- never hit yet
+    i <- FetchArg
+    r <- GetUpValue i
+    v <- Peek
+    Effect (WriteRef r v)
+  OP.SET_UPVALUE_ind -> do
+    i <- FetchArg
+    r <- GetUpValue i
+    r <- asIndirection <$> Effect (ReadRef r)
+    v <- Peek
+    Effect (WriteRef r v)
+
   OP.INDIRECT -> do
     v <- Pop
     r <- Effect (NewRef v)

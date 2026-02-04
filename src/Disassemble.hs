@@ -51,6 +51,15 @@ disMaybeDef = do
         OP.GET_LOCAL_REF -> op1
         OP.GET_UPVALUE_REF -> op1
 
+        OP.GET_LOCAL -> op1
+        OP.GET_LOCAL_ind -> op1
+        OP.GET_UPVALUE -> op1
+        OP.GET_UPVALUE_ind -> op1
+        OP.SET_LOCAL -> op1
+        OP.SET_LOCAL_ind -> op1
+        OP.SET_UPVALUE -> op1
+        OP.SET_UPVALUE_ind -> op1
+
         OP.INDIRECT -> op0
         OP.DEREF -> op0
         OP.ASSIGN -> op0

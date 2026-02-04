@@ -25,6 +25,15 @@ typedef enum {
   OP_GET_LOCAL_REF      = '/',
   OP_GET_UPVALUE_REF    = '\\',
 
+  OP_GET_LOCAL          = '0',
+  OP_GET_LOCAL_ind      = '1',
+  OP_GET_UPVALUE        = '2',
+  OP_GET_UPVALUE_ind    = '3',
+  OP_SET_LOCAL          = '4',
+  OP_SET_LOCAL_ind      = '5',
+  OP_SET_UPVALUE        = '6',
+  OP_SET_UPVALUE_ind    = '7',
+
   OP_INDIRECT           = '&',
   OP_DEREF              = '*',
   OP_ASSIGN             = '=',
@@ -424,6 +433,59 @@ void run_code(Code code,VM* vm) {
       PUSH(value);
       break;
     }
+
+    case OP_GET_LOCAL: {
+      u8 arg = ARG;
+      Value value = vm->base[arg];
+      PUSH(value);
+      break;
+    }
+    case OP_GET_LOCAL_ind: {
+      u8 arg = ARG;
+      Value value = *AsIndirection(vm->base[arg]);
+      PUSH(value);
+      break;
+    }
+    case OP_GET_UPVALUE: {
+      u8 arg = ARG;
+      Value value = vm->ups[arg];
+      PUSH(value);
+      break;
+    }
+    case OP_GET_UPVALUE_ind: {
+      u8 arg = ARG;
+      Value value = *AsIndirection(vm->ups[arg]);
+      PUSH(value);
+      break;
+    }
+
+    case OP_SET_LOCAL: {
+      u8 arg = ARG;
+      Value value = TOP; //peek
+      vm->base[arg] = value;
+      break;
+    }
+    case OP_SET_LOCAL_ind: {
+      u8 arg = ARG;
+      Value value = TOP; //peek
+      *AsIndirection(vm->base[arg]) = value;
+      break;
+    }
+
+    case OP_SET_UPVALUE: {
+      assert(false); //never run yet
+      u8 arg = ARG;
+      Value value = TOP; //peek
+      vm->ups[arg] = value;
+      break;
+    }
+    case OP_SET_UPVALUE_ind: {
+      u8 arg = ARG;
+      Value value = TOP; //peek
+      *AsIndirection(vm->ups[arg]) = value;
+      break;
+    }
+
     case OP_INDIRECT: {
       Value v1 = TOP;
       Value* ind = makeIndirection(v1);
